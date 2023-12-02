@@ -252,7 +252,7 @@ def forgot_password():
         db.session.commit()
 
         # Here, you would construct a password reset link with the reset_token
-        reset_link = f"{current_app.config['FRONTEND_URL']}/reset-password?token={reset_token}&email={user.email}"
+        reset_link = f"{current_app.config['FRONTEND_URL']}/auth/reset-password?token={reset_token}&email={user.email}"
 
         thread = threading.Thread(target=send_reset_password_link,
                                   args=(reset_link, user.email, current_app._get_current_object()))
