@@ -1,0 +1,927 @@
+import io
+import os
+import uuid
+from datetime import datetime
+
+from PIL import Image
+from flask import Blueprint, jsonify, request, send_from_directory, current_app, g
+from flask_jwt_extended import jwt_required
+from slugify import slugify
+from sqlalchemy import or_
+from werkzeug.utils import secure_filename
+
+from . import db, bcrypt, allowed_file
+from .decorators import current_user_required
+from .models import Admin, Brand, Location, Community, Cars, Listings, ListingImage, SafetyFeatures, ListingAmenities, \
+    User
+from .schemas import BrandSchema, CommunitySchema, ListingsSchema, CarsSchema, UserSchema, ListingImageSchema
+
+views = Blueprint('views', __name__)
+
+# SCHEMAS
+brand_schema = BrandSchema()
+brands_schema = BrandSchema(many=True)
+
+user_schema = UserSchema()
+users_schema = UserSchema(many=True)
+
+location_schema = BrandSchema()
+locations_schema = BrandSchema(many=True)
+
+community_schema = CommunitySchema()
+communities_schema = CommunitySchema(many=True)
+
+listing_schema = ListingsSchema()
+listings_schema = ListingsSchema(many=True)
+
+listing_image_schema = ListingImageSchema()
+listing_images_schema = ListingImageSchema(many=True)
+
+car_schema = CarsSchema()
+cars_schema = CarsSchema(many=True)
+
+
+####################################################################### ADMIN API ######################################
+# Admin Credentials Initializer
+@views.route('/admin/initializer', methods=['GET'])
+def initializer():
+    data = Admin.query.first()
+    if not data:
+        password = 'Imotor@37'
+        password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+        new_admin = Admin(email='imotorapp37@gmail.com', password=password_hash, first_name='Symon', last_name='Sitier')
+        db.session.add(new_admin)
+        db.session.commit()
+
+    return jsonify(200)
+
+
+# Serve Images to Frontend
+@views.route('/uploaded_img/<path:filename>', methods=['GET'])
+def serve_uploaded_image(filename):
+    return send_from_directory(directory=current_app.config['UPLOAD_FOLDER'], path=filename)
+
+
+# Image Resizer
+def resize_image(image, max_size_kb):
+    max_size_bytes = max_size_kb * 1024  # Convert KB to bytes
+
+    # Open the image using PIL
+    img = Image.open(image)
+
+    # Convert the image to RGB mode if it's in RGBA mode (has an alpha channel)
+    if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
+        img = img.convert('RGB')
+
+    # Calculate current image size in bytes
+    img_byte_array = io.BytesIO()
+    img.save(img_byte_array, format='JPEG')  # Change format as required
+    img_size = img_byte_array.tell()
+
+    # Resize the image while keeping the aspect ratio
+    if img_size > max_size_bytes:
+        # Calculate the resize ratio to fit within the size limit
+        resize_ratio = (max_size_bytes / img_size) ** 0.5  # square root to maintain aspect ratio
+
+        # Calculate new dimensions
+        new_width = int(img.width * resize_ratio)
+        new_height = int(img.height * resize_ratio)
+
+        # Resize the image
+        img = img.resize((new_width, new_height))
+
+    return img
+
+
+# -Settings-#
+# Brands View
+@views.route('/admin/brand-view', methods=['GET'])
+@jwt_required()
+@current_user_required
+def brands_view():
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+
+    search = request.args.get('search', '', type=str)
+
+    data = Brand.query
+
+    if search:
+        search_words = search.split(',')
+
+        def search_filter(word):
+            word = word.strip()
+            return or_(
+                Brand.name.ilike(f"%{word}%"),
+            )
+
+        filter_conditions = [search_filter(word) for word in search_words]
+        data = data.filter(*filter_conditions)
+
+    data = data.order_by(Brand.id.desc())
+
+    data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
+
+    result = brands_schema.dump(data_paginated)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+
+# Brands Create
+@views.route('/admin/brand-create', methods=['POST'])
+@jwt_required()
+@current_user_required
+def brand_create():
+    new_data = request.form
+
+    existing_data = Brand.query.filter_by(name=new_data['name'].lower(), type=new_data['type'].lower()).first()
+
+    if existing_data is not None:
+        return jsonify({'message': 'Brand Already Exists!'}), 400
+
+    file_name = None
+    file = request.files.get('image')
+
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file_name = str(uuid.uuid1()) + '_' + filename
+        file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], file_name))
+
+    new_data2 = Brand(
+        name=new_data['name'],
+        type=new_data['type'],
+        image=file_name,
+        created_by=g.current_user['email']
+    )
+    db.session.add(new_data2)
+    db.session.commit()
+
+    new_added_data = brand_schema.dump(new_data2)
+    return jsonify({'message': 'Brand successfully added!', 'new_data': new_added_data}), 200
+
+
+# Locations View
+@views.route('/admin/location-view', methods=['GET'])
+@jwt_required()
+@current_user_required
+def location_view():
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+
+    search = request.args.get('search', '', type=str)
+
+    data = Location.query
+
+    if search:
+        search_words = search.split(',')
+
+        def search_filter(word):
+            word = word.strip()
+            return or_(
+                Location.name.ilike(f"%{word}%"),
+            )
+
+        filter_conditions = [search_filter(word) for word in search_words]
+        data = data.filter(*filter_conditions)
+
+    data = data.order_by(Location.id.desc())
+
+    data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
+
+    result = locations_schema.dump(data_paginated)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+
+# Location Create
+@views.route('/admin/location-create', methods=['POST'])
+@jwt_required()
+@current_user_required
+def location_create():
+    new_data = request.form
+
+    existing_data = Location.query.filter_by(name=new_data['name'].lower()).first()
+
+    if existing_data is not None:
+        return jsonify({'message': 'Location Already Exists!'}), 400
+
+    file_name = None
+    file = request.files.get('image')
+
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file_name = str(uuid.uuid1()) + '_' + filename
+        file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], file_name))
+
+    new_data2 = Location(
+        name=new_data['name'],
+        image=file_name,
+        created_by=g.current_user['email']
+    )
+    db.session.add(new_data2)
+    db.session.commit()
+
+    new_added_data = location_schema.dump(new_data2)
+    return jsonify({'message': 'Location successfully added!', 'new_data': new_added_data}), 200
+
+
+# Community View
+@views.route('/admin/community-view/<int:id>', methods=['GET'])
+@jwt_required()
+@current_user_required
+def community_view(id):
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+
+    search = request.args.get('search', '', type=str)
+
+    data = Community.query.filter_by(location_id=id)
+
+    if search:
+        search_words = search.split(',')
+
+        def search_filter(word):
+            word = word.strip()
+            return or_(
+                Community.name.ilike(f"%{word}%"),
+            )
+
+        filter_conditions = [search_filter(word) for word in search_words]
+        data = data.filter(*filter_conditions)
+
+    data = data.order_by(Community.id.desc())
+
+    data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
+
+    result = communities_schema.dump(data_paginated)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+
+# Community Create
+@views.route('/admin/community-create/<int:id>', methods=['POST'])
+@jwt_required()
+@current_user_required
+def community_create(id):
+    new_data = request.form
+
+    existing_data = Community.query.filter_by(name=new_data['name'].lower(), location_id=id).first()
+
+    if existing_data is not None:
+        return jsonify({'message': 'Community Already Exists!'}), 400
+
+    file = request.files.get('image')
+
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file_name = str(uuid.uuid1()) + '_' + filename
+        file.save(os.path.join(current_app.config['UPLOAD_FOLDER'], file_name))
+
+        new_data2 = Community(
+            name=new_data['name'],
+            location_id=id,
+            created_by=g.current_user['email'],
+            image=file_name
+        )
+    else:
+        new_data2 = Community(
+            name=new_data['name'],
+            location_id=id,
+            created_by=g.current_user['email']
+        )
+
+    db.session.add(new_data2)
+    db.session.commit()
+
+    new_added_data = community_schema.dump(new_data2)
+    return jsonify({'message': 'Community successfully added!', 'new_data': new_added_data}), 200
+
+
+# USER INFORMATION
+@views.route('/admin/users-view', methods=['GET'])
+@jwt_required()
+@current_user_required
+def users_view():
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+
+    search = request.args.get('search', '', type=str)
+
+    data = User.query
+
+    if search:
+        search_words = search.split(',')
+
+        def search_filter(word):
+            word = word.strip()
+            return or_(
+                User.email.ilike(f"%{word}%"),
+            )
+
+        filter_conditions = [search_filter(word) for word in search_words]
+        data = data.filter(*filter_conditions)
+
+    data = data.order_by(User.id.desc())
+
+    data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
+
+    result = users_schema.dump(data_paginated)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+
+############################################################## CLIENT SIDE #############################################
+
+# All Car View
+@views.route('/client/all-car-view', methods=['GET'])
+def all_car_view():
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+
+    search = request.args.get('search', '', type=str)
+
+    data = Listings.query.filter_by(vehicle_type='car')
+
+    if search:
+        search_words = search.split(',')
+
+        def search_filter(word):
+            word = word.strip()
+            return or_(
+                Listings.title.ilike(f"%{word}%"),
+            )
+
+        filter_conditions = [search_filter(word) for word in search_words]
+        data = data.filter(*filter_conditions)
+
+    data = data.order_by(Listings.id.desc())
+
+    data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
+
+    result = listings_schema.dump(data_paginated)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+
+# User Car View
+@views.route('/client/user-car-view/<int:id>', methods=['GET'])
+def user_car_view(id):
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+
+    search = request.args.get('search', '', type=str)
+
+    data = Listings.query.filter_by(vehicle_type='car', user_id=id)
+
+    user = User.query.get(id)
+    if not user:
+        return jsonify({
+            "message": 'User not found',
+        }), 400
+
+    if search:
+        search_words = search.split(',')
+
+        def search_filter(word):
+            word = word.strip()
+            return or_(
+                Listings.title.ilike(f"%{word}%"),
+            )
+
+        filter_conditions = [search_filter(word) for word in search_words]
+        data = data.filter(*filter_conditions)
+
+    data = data.order_by(Listings.id.desc())
+
+    data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
+
+    result = listings_schema.dump(data_paginated)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+
+# Car Create
+@views.route('/client/car-create', methods=['POST'])
+@jwt_required()
+@current_user_required
+def car_create():
+    new_data = request.form
+    existing_data = Listings.query.filter_by(vin=new_data['vin'].lower()).first()
+
+    if existing_data is not None:
+        return jsonify({'message': 'Car Already Exists!'}), 400
+
+    file_name = None
+    file = request.files.get('featured_image')
+
+    if file and allowed_file(file.filename):
+        resize_file = resize_image(file, max_size_kb=1024)
+        filename = secure_filename(file.filename)
+        file_name = str(uuid.uuid1()) + '_' + filename
+        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+        resize_file.save(filepath, format='JPEG')
+
+    title = f"{new_data['model']} {new_data['model_year']}"
+    slug = slugify(title)
+
+    listing_data = Listings(
+        vin=new_data['vin'],
+        title=title,
+        slug=slug,
+        price=new_data['price'],
+        description=new_data['description'],
+        model=new_data['model'],
+        model_year=new_data['model_year'],
+        variant=new_data['variant'],
+        mileage=new_data['mileage'],
+        vehicle_type='car',
+        featured_as='standard',
+        user_id=new_data['user_id'],
+        brand_id=new_data['brand_id'],
+        location_id=new_data['location_id'],
+        community_id=new_data['community_id'],
+        featured_image=file_name,
+        created_by=g.current_user['email']
+    )
+    db.session.add(listing_data)
+    db.session.commit()
+
+    images = request.files.getlist('images')
+    for image in images:
+        if image and allowed_file(image.filename):
+            resized_img = resize_image(image, max_size_kb=1024)
+            filename = str(uuid.uuid1()) + '_' + secure_filename(image.filename)
+            filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+            resized_img.save(filepath, format='JPEG')
+
+            images_data = ListingImage(image=filename, listing_id=listing_data.id, created_by=g.current_user['email'])
+            db.session.add(images_data)
+            db.session.commit()
+
+    safety_features = new_data['safety_features'].split(', ')
+    for features in safety_features:
+        features_data = SafetyFeatures(name=features, listing_id=listing_data.id)
+        db.session.add(features_data)
+        db.session.commit()
+
+    amenities = new_data['amenities'].split(', ')
+    for amenity in amenities:
+        amenity_data = ListingAmenities(name=amenity, listing_id=listing_data.id)
+        db.session.add(amenity_data)
+        db.session.commit()
+
+    car_data = Cars(
+        listing_id=listing_data.id,
+        fuel_type=new_data['fuel_type'],
+        exterior_color=new_data['exterior_color'],
+        interior_color=new_data['interior_color'],
+        warranty=new_data['warranty'],
+        doors=new_data['doors'],
+        no_of_cylinders=new_data['no_of_cylinders'],
+        transmission_type=new_data['transmission_type'],
+        body_type=new_data['body_type'],
+        seating_capacity=new_data['seating_capacity'],
+        horse_power=new_data['horse_power'],
+        engine_capacity=new_data['engine_capacity'],
+        steering_hand=new_data['steering_hand'],
+        trim=new_data['trim'],
+        insured_uae=new_data['insured_uae'],
+        regional_spec=new_data['regional_spec'],
+        created_by=g.current_user['email']
+    )
+    db.session.add(car_data)
+    db.session.commit()
+
+    new_added_data = listing_schema.dump(listing_data)
+    return jsonify({'message': 'Car successfully listed!', 'new_data': new_added_data}), 200
+
+
+# Single Car View
+@views.route('/client/single-car-view/<int:id>', methods=['GET'])
+def single_car_view(id):
+    data = Listings.query.get(id)
+    if data is None:
+        return jsonify({'message': 'Car not found.'}), 400
+    result = listing_schema.dump(data)
+
+    return jsonify({
+        "data": result,
+    }), 200
+
+#Single Car Update Information
+@views.route('/client/single-car-view/update-information/<int:id>', methods=['PUT'])
+@jwt_required()
+@current_user_required
+def update_car(id):
+    new_data = request.get_json()
+    data = User.query.get(g.current_user['id'])
+    data_listing = Listings.query.filter_by(id=id, user_id=data.id).first()
+    if data_listing:
+        listing_data = Listings.query.get(id)
+        if listing_data:
+            title = f"{new_data['model']} {new_data['model_year']}"
+            slug = slugify(title)
+            listing_data.title = title
+            listing_data.slug = slug
+            listing_data.price = new_data['price']
+            listing_data.description = new_data['description']
+            listing_data.model = new_data['model']
+            listing_data.model_year = new_data['model_year']
+            listing_data.variant = new_data['variant']
+            listing_data.mileage = new_data['mileage']
+            listing_data.updated_by = g.current_user['email']
+            listing_data.updated_date = datetime.now()
+            db.session.commit()
+
+            car_data = Cars.query.filter_by(listing_id=listing_data.id).first()
+            car_data.fuel_type = new_data['fuel_type']
+            car_data.exterior_color = new_data['exterior_color']
+            car_data.interior_color = new_data['interior_color']
+            car_data.warranty = new_data['warranty']
+            car_data.doors = new_data['doors']
+            car_data.no_of_cylinders = new_data['no_of_cylinders']
+            car_data.transmission_type = new_data['transmission_type']
+            car_data.body_type = new_data['body_type']
+            car_data.seating_capacity = new_data['seating_capacity']
+            car_data.horse_power = new_data['horse_power']
+            car_data.engine_capacity = new_data['engine_capacity']
+            car_data.steering_hand = new_data['steering_hand']
+            car_data.trim = new_data['trim']
+            car_data.insured_uae = new_data['insured_uae']
+            car_data.regional_spec = new_data['regional_spec']
+            car_data.updated_by = g.current_user['email']
+            car_data.updated_date = datetime.now()
+            db.session.commit()
+        else:
+            return jsonify({'message': 'Listing not found.'}), 400
+    else:
+        return jsonify({'message': 'You are not allowed to update other users listing.'}), 400
+
+    updated_data = listing_schema.dump(listing_data)
+    return jsonify({'message': f'Listing updated successfully!', 'updated_data': updated_data}), 200
+
+# Car update featured image
+@views.route('/client/single-car-view/update-featured-image/<int:id>', methods=['PUT'])
+@jwt_required()
+@current_user_required
+def update_car_featured_img(id):
+    image = request.files.get('featured_image')
+    if not image:
+        return jsonify({'message': 'No image file provided'}), 400
+
+    if not allowed_file(image.filename):
+        return jsonify({'message': 'Invalid image file format'}), 400
+
+    data = User.query.get(g.current_user['id'])
+    data_listing = Listings.query.filter_by(id=id, user_id=data.id).first()
+    if data_listing:
+        listing_data = Listings.query.get(id)
+        if listing_data:
+            if listing_data.featured_image:
+                image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], data.profile_picture)
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+
+            resized_img = resize_image(image, max_size_kb=1024)
+            filename = str(uuid.uuid1()) + '_' + secure_filename(image.filename)
+            filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+            resized_img.save(filepath, format='JPEG')
+
+            data.featured_image = filename
+            data.updated_by = g.current_user['email']
+            data.updated_date = datetime.now()
+            db.session.commit()
+        else:
+            return jsonify({'message': 'Listing not found.'}), 400
+    else:
+        return jsonify({'message': 'You are not allowed to update other users listing.'}), 400
+
+    updated_data = listing_schema.dump(data)
+    return jsonify({'message': f'Listing Featured Image updated successfully!', 'updated_data': updated_data}), 200
+
+#Car Add Images
+@views.route('/client/single-car-view/add-images/<int:id>', methods=['POST'])
+@jwt_required()
+@current_user_required
+def car_add_images(id):
+    images = request.files.getlist('images')
+    if not images:
+        return jsonify({'message': 'No image files provided'}), 400
+
+    data = User.query.get(g.current_user['id'])
+    data_listing = Listings.query.filter_by(id=id, user_id=data.id).first()
+
+    if data_listing:
+        listing_data = Listings.query.get(id)
+        if listing_data:
+            images_data = []
+            for image in images:
+                if image and allowed_file(image.filename):
+                    resized_img = resize_image(image, max_size_kb=1024)
+                    filename = str(uuid.uuid1()) + '_' + secure_filename(image.filename)
+                    filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+                    resized_img.save(filepath, format='JPEG')
+
+                    new_data = ListingImage(image=filename, listing_id=listing_data.id, created_by=g.current_user['email'])
+                    db.session.add(new_data)
+                    db.session.commit()
+
+                    images_data.append({'image_data': listing_image_schema.dump(new_data)})
+        else:
+            return jsonify({'message': 'Listing not found.'}), 400
+    else:
+        return jsonify({'message': 'You are not allowed to update other users listing.'}), 400
+
+    return jsonify({'images_uploaded': len(images_data), 'image_urls': images_data})
+
+#Delete Car Images
+@views.route('/client/single-car-view/delete-images/<int:id>', methods=['DELETE'])
+@jwt_required()
+@current_user_required
+def delete_car_images(id):
+    image_ids = request.get_json().get('image_ids')
+    data = User.query.get(g.current_user['id'])
+    data_listing = Listings.query.filter_by(id=id, user_id=data.id).first()
+    if data_listing:
+        listing_data = Listings.query.get(id)
+        if listing_data:
+            for image_id in image_ids:
+                image = ListingImage.query.get(image_id)
+                if image:
+                    image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], image.image)
+                    if os.path.exists(image_path):
+                        os.remove(image_path)
+                db.session.delete(image)
+                db.session.commit()
+        else:
+            return jsonify({'message': 'Listing not found.'}), 400
+    else:
+        return jsonify({'message': 'You are not allowed to update other users listing.'}), 400
+
+    return 'Success!', 200
+
+#Car Add Safety Features
+@views.route('/client/single-car-view/add-safety-features/<int:id>', methods=['POST'])
+@jwt_required()
+@current_user_required
+def car_add_safety_features(id):
+    features = request.get_json().get('features')
+    data = User.query.get(g.current_user['id'])
+    data_listing = Listings.query.filter_by(id=id, user_id=data.id).first()
+    if data_listing:
+        listing_data = Listings.query.get(id)
+        if listing_data:
+            for feature in features:
+                existing_feature = SafetyFeatures.query.filter_by(name=feature.lower()).first()
+                if existing_feature:
+                    pass
+                else:
+                    new_data = SafetyFeatures(name=feature, listing_id=listing_data.id, created_by=g.current_user['email'])
+                    db.session.add(new_data)
+                    db.session.commit()
+        else:
+            return jsonify({'message': 'Listing not found.'}), 400
+    else:
+        return jsonify({'message': 'You are not allowed to update other users listing.'}), 400
+
+    updated_data = listing_schema.dump(listing_data)
+    return jsonify({'message': f'Safety Features added successfully!', 'updated_data': updated_data}), 200
+
+#Delete Car Safety Features
+@views.route('/client/single-car-view/delete-safety-features/<int:id>', methods=['DELETE'])
+@jwt_required()
+@current_user_required
+def delete_car_safety_features(id):
+    feature_ids = request.get_json().get('feature_ids')
+    data = User.query.get(g.current_user['id'])
+    data_listing = Listings.query.filter_by(id=id, user_id=data.id).first()
+    if data_listing:
+        listing_data = Listings.query.get(id)
+        if listing_data:
+            for feature_id in feature_ids:
+                feature = SafetyFeatures.query.get(feature_id)
+                db.session.delete(feature)
+                db.session.commit()
+        else:
+            return jsonify({'message': 'Listing not found.'}), 400
+    else:
+        return jsonify({'message': 'You are not allowed to update other users listing.'}), 400
+
+    return 'Success!', 200
+
+#Car Add Safety Features
+@views.route('/client/single-car-view/add-amenities/<int:id>', methods=['POST'])
+@jwt_required()
+@current_user_required
+def car_add_amenities(id):
+    amenities = request.get_json().get('amenities')
+    data = User.query.get(g.current_user['id'])
+    data_listing = Listings.query.filter_by(id=id, user_id=data.id).first()
+    if data_listing:
+        listing_data = Listings.query.get(id)
+        if listing_data:
+            for amenity in amenities:
+                existing_data = ListingAmenities.query.filter_by(name=amenity.lower()).first()
+                if existing_data:
+                    pass
+                else:
+                    new_data = ListingAmenities(name=amenity, listing_id=listing_data.id, created_by=g.current_user['email'])
+                    db.session.add(new_data)
+                    db.session.commit()
+        else:
+            return jsonify({'message': 'Listing not found.'}), 400
+    else:
+        return jsonify({'message': 'You are not allowed to update other users listing.'}), 400
+
+    updated_data = listing_schema.dump(listing_data)
+    return jsonify({'message': f'Amenities added successfully!', 'updated_data': updated_data}), 200
+
+#Delete Car Amenities
+@views.route('/client/single-car-view/delete-amenities/<int:id>', methods=['DELETE'])
+@jwt_required()
+@current_user_required
+def delete_car_amenities(id):
+    amenity_ids = request.get_json().get('amenity_ids')
+    data = User.query.get(g.current_user['id'])
+    data_listing = Listings.query.filter_by(id=id, user_id=data.id).first()
+    if data_listing:
+        listing_data = Listings.query.get(id)
+        if listing_data:
+            for amenity_id in amenity_ids:
+                amenity = ListingAmenities.query.get(amenity_id)
+                db.session.delete(amenity)
+                db.session.commit()
+        else:
+            return jsonify({'message': 'Listing not found.'}), 400
+    else:
+        return jsonify({'message': 'You are not allowed to update other users listing.'}), 400
+
+    return 'Success!', 200
+
+
+# Get All Brands
+@views.route('/client/car-brand-view', methods=['GET'])
+def client_brands_view():
+    data = Brand.query.filter_by(type='car')
+
+    result = brands_schema.dump(data)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+
+# Get All Location
+@views.route('/client/location-view', methods=['GET'])
+def client_location_view():
+    data = Location.query
+
+    result = locations_schema.dump(data)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+
+# Get Community Based on location
+@views.route('/client/community-view', methods=['GET'])
+def client_community_view():
+    location_id = request.args.get('location_id', type=int)
+    data = Community.query.filter_by(location_id=location_id)
+
+    result = communities_schema.dump(data)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+
+#User Profile View
+@views.route('/user-profile/<int:id>', methods=['GET'])
+def user_profile(id):
+    data = User.query.get(id)
+    if data:
+        result = user_schema.dump(data)
+    else:
+        return jsonify({'message': 'User not found.'}), 400
+
+    return jsonify({"data": result})
+
+
+# User Update Profile
+@views.route('/update/user/profile/<int:id>', methods=['PUT'])
+@jwt_required()
+@current_user_required
+def update_user_profile(id):
+    new_data = request.get_json()
+    data = User.query.get(id)
+
+    if data:
+        data.first_name = new_data['first_name']
+        data.last_name = new_data['last_name']
+        data.contact_number = new_data['contact_number']
+        data.whats_app_number = new_data['whats_app_number']
+        data.viber_number = new_data['viber_number']
+        data.updated_by = g.current_user['email']
+        data.updated_date = datetime.now()
+        db.session.commit()
+    else:
+        return jsonify({'message': 'User not found.'}), 400
+
+    updated_data = user_schema.dump(data)
+    return jsonify({'message': f'Profile updated successfully!', 'updated_data': updated_data}), 200
+
+
+# User update password
+@views.route('/update/user/profile-password/<int:id>', methods=['PUT'])
+@jwt_required()
+@current_user_required
+def update_profile_password(id):
+    new_data = request.get_json()
+
+    data = User.query.get(id)
+    if data:
+        old_password = new_data['old_password']
+        if not bcrypt.check_password_hash(data.password, old_password):
+            return jsonify({'message': 'Invalid old password.'}), 400
+
+        new_password = new_data['new_password']
+        password_hash = bcrypt.generate_password_hash(new_password).decode('utf-8')
+        data.password = password_hash
+        data.updated_by = g.current_user['email']
+        data.updated_date = datetime.now()
+        db.session.commit()
+    else:
+        return jsonify({'message': 'User not found.'}), 400
+
+    return jsonify({'message': f'Password updated successfully!'}), 200
+
+
+# User update profile picture
+@views.route('/update/user/profile-picture/<int:id>', methods=['PUT'])
+@jwt_required()
+@current_user_required
+def update_profile_picture(id):
+    image = request.files.get('image')
+    if not image:
+        return jsonify({'message': 'No image file provided'}), 400
+
+    if not allowed_file(image.filename):
+        return jsonify({'message': 'Invalid image file format'}), 400
+
+    data = User.query.get(id)
+    if data:
+        if data.profile_picture != 'default_profile_picture.jpg':
+            image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], data.profile_picture)
+            if os.path.exists(image_path):
+                os.remove(image_path)
+
+        resized_img = resize_image(image, max_size_kb=1024)
+        filename = str(uuid.uuid1()) + '_' + secure_filename(image.filename)
+        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+        resized_img.save(filepath, format='JPEG')
+
+        data.profile_picture = filename
+        data.updated_by = g.current_user['email']
+        data.updated_date = datetime.now()
+        db.session.commit()
+    else:
+        return jsonify({'message': 'User not found.'}), 400
+
+    updated_data = user_schema.dump(data)
+
+    return jsonify({'message': f'Profile Picture updated successfully!', 'updated_data': updated_data}), 200
+
+
+# FOR TESTING DATA
+@views.route('/test', methods=['POST'])
+def test():
+    new_data = request.form
+    print(new_data['safety_features'])
+    safety_features = new_data['safety_features'].split(', ')
+    print(safety_features)
+
+    return jsonify({
+        "Success": '200',
+    }), 200
