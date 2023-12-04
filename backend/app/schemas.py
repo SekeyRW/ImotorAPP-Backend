@@ -44,6 +44,10 @@ class ListingsSchema(ma.SQLAlchemyAutoSchema):
     safety_features = fields.Nested('SafetyFeaturesSchema', many=True)
     listing_amenities = fields.Nested('ListingAmenitiesSchema', many=True)
     listing_image = fields.Nested('ListingImageSchema', many=True)
+    user = fields.Nested('UserSchema')
+    brand = fields.Nested('BrandSchema')
+    location = fields.Nested('LocationSchema')
+    community = fields.Nested('CommunitySchema')
 
 class CarsSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
