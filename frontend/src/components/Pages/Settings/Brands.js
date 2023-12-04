@@ -58,7 +58,7 @@ function Brands() {
                 image: image,
                 image_name: imageFileName,
             });
-
+            console.log(formData)
             const fileUrl = URL.createObjectURL(image);
             setFileUrl(fileUrl);
 
@@ -215,6 +215,7 @@ function Brands() {
                             <option value="car">Cars</option>
                             <option value="motorcycle">Motorcycle</option>
                             <option value="boat">Boats</option>
+                            <option value="heavy vehicle">Heavy Vehicles</option>
                         </select>
                         <label className="form-label">Image</label>
                         <input className="form-control" type="file" name="image" id="image" required/>

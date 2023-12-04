@@ -1,7 +1,7 @@
 from marshmallow import fields
 from . import ma
 from .models import User, Admin, Brand, Listings, Cars, ListingAmenities, SafetyFeatures, ListingImage, Location, \
-    Community, Motorcycle
+    Community, Motorcycle, Boats, HeavyVehicles
 
 
 class UserSchema(ma.SQLAlchemyAutoSchema):
@@ -38,6 +38,9 @@ class ListingsSchema(ma.SQLAlchemyAutoSchema):
         load_instance = True
 
     cars = fields.Nested('CarsSchema')
+    motorcycle = fields.Nested('MotorcycleSchema')
+    boats = fields.Nested('BoatsSchema')
+    heavy_vehicles = fields.Nested('HeavyVehiclesSchema')
     safety_features = fields.Nested('SafetyFeaturesSchema', many=True)
     listing_amenities = fields.Nested('ListingAmenitiesSchema', many=True)
     listing_image = fields.Nested('ListingImageSchema', many=True)
@@ -51,6 +54,17 @@ class MotorcycleSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Motorcycle
         load_instance = True
+class BoatsSchema(ma.SQLAlchemyAutoSchema):
+    class Meta:
+        model = Boats
+        load_instance = True
+
+
+class HeavyVehiclesSchema(ma.SQLAlchemyAutoSchema):
+    class Meta:
+        model = HeavyVehicles
+        load_instance = True
+
 
 class ListingAmenitiesSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
