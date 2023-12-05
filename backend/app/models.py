@@ -89,7 +89,7 @@ class Community(db.Model):
 class Listings(db.Model):
     __tablename__ = 'listings'
     id = db.Column(db.Integer, primary_key=True)
-    vin = db.Column(db.String(255), unique=True)
+    vin = db.Column(db.String(255))
     title = db.Column(db.String(255))
     slug = db.Column(db.Text)
     price = db.Column(db.String(255))
