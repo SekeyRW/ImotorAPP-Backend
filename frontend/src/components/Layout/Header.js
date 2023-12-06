@@ -36,6 +36,35 @@ function Header() {
                                                    className={`nav-link${isActiveRoute('/users-information') ? ' active' : ''}`}>
                         <i className="fas fa-users" aria-hidden="true"></i><span>Users</span></Link></li>
                     <hr></hr>
+                     <NavDropdown
+                        title={<><i className="fas fa-folder" aria-hidden="true"></i><span>Listings</span></>}
+                        menuVariant="dark"
+                        drop='down-centered'
+                    >
+                        <>
+                            <NavDropdown.Item>
+                                <Link to='/listings/cars'
+                                      className={`nav-link${isActiveRoute('/listings/cars') ? ' active' : ''}`}>
+                                    <i className="fas fa-car" aria-hidden="true"></i><span>Cars</span></Link>
+                            </NavDropdown.Item>
+                             <NavDropdown.Item>
+                                <Link to='/listings/motorcycle'
+                                      className={`nav-link${isActiveRoute('/listings/motorcycle') ? ' active' : ''}`}>
+                                    <i className="fas fa-motorcycle" aria-hidden="true"></i><span>Motorcycle</span></Link>
+                            </NavDropdown.Item>
+                             <NavDropdown.Item>
+                                <Link to='/listings/boats'
+                                      className={`nav-link${isActiveRoute('/listings/boats') ? ' active' : ''}`}>
+                                    <i className="fas fa-ship" aria-hidden="true"></i><span>Boats</span></Link>
+                            </NavDropdown.Item>
+                             <NavDropdown.Item>
+                                <Link to='/listings/heavy-vehicles'
+                                      className={`nav-link${isActiveRoute('/listings/heavy-vehicles') ? ' active' : ''}`}>
+                                    <i className="fas fa-truck" aria-hidden="true"></i><span>Heavy Vehicle</span></Link>
+                            </NavDropdown.Item>
+                        </>
+                    </NavDropdown>
+                    <hr></hr>
                     <NavDropdown
                         title={<><i className="fas fa-cogs" aria-hidden="true"></i><span>Settings</span></>}
                         menuVariant="dark"

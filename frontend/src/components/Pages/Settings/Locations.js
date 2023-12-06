@@ -21,6 +21,14 @@ function Locations() {
     const [fileUrl, setFileUrl] = useState('');
     const navigate = useNavigate();
 
+    const [update_id, setUpdateId] = useState('')
+    const [showEditModal, setEditModal] = useState(false);
+    const [showEditConfrimModal, setEditConfirmModal] = useState(false);
+
+    const [deleteDataId, setDeleteDataId] = useState(null);
+    const [deleteDataName, setDeleteDataName] = useState(null);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
+
     const pageCount = Math.ceil(total / pageSize);
     const handlePageChange = ({selected}) => {
         setPageNumber(selected);
@@ -96,7 +104,98 @@ function Locations() {
             })
     }
 
-      function handleCommunity(id, name) {
+    function confirmEditData(event) {
+        event.preventDefault()
+        setModifying(true)
+
+        const imageFileInput = event.target.elements.image;
+
+        if (imageFileInput && imageFileInput.files && imageFileInput.files.length > 0) {
+            const image = imageFileInput.files[0];
+            const imageFileName = image.name;
+
+            const fileExtension = imageFileName.toLowerCase().split('.').pop();
+            if (['pdf', 'jpg', 'jpeg', 'png'].includes(fileExtension)) {
+                setFormData({
+                    name: event.target.elements.location_name.value,
+                    image: image,
+                    image_name: imageFileName,
+                });
+                const fileUrl = URL.createObjectURL(image);
+                setFileUrl(fileUrl);
+                setEditConfirmModal(true);
+            } else {
+                // Display an error toast for invalid file type
+                toast.error('Invalid file type. Only image files are allowed.');
+                setModifying(false);
+            }
+        } else {
+            setFormData({
+                name: event.target.elements.location_name.value,
+            });
+            setEditConfirmModal(true);
+        }
+
+
+    }
+
+    function handleEditData() {
+        axios.put(`${process.env.REACT_APP_API_URL}/admin/location-update/${update_id}`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data', 'Authorization': `Bearer ${token}`,
+            }
+        })
+            .then(response => {
+                if (response.status === 400) {
+                    toast.error(response.data.message)
+                } else {
+                    const updatedData = response.data.updated_data;
+                    const updatedIndex = data.findIndex(item => item.id === updatedData.id);
+                    const updatedData2 = [...data];
+                    updatedData2[updatedIndex] = updatedData;
+                    setData(updatedData2);
+                    toast.success(response.data.message)
+                }
+            })
+            .catch(error => {
+                if (error.response && error.response.status === 400) {
+                    toast.error(error.response.data.message);
+                } else {
+                    console.log(error);
+                    toast.error('Something went wrong. Please try again.');
+                }
+            })
+            .finally(() => {
+                setModifying(false)
+                setEditModal(false)
+                setUpdateId('')
+            })
+    }
+
+    function confirmDeleteData(id, name) {
+        setDeleteDataId(id);
+        setDeleteDataName(`${name}`);
+        setShowDeleteModal(true);
+    }
+
+    function handleDeleteData(id) {
+        fetch(`${process.env.REACT_APP_API_URL}/admin/location-delete/${id}`, {
+            method: 'DELETE', headers: {
+                'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`,
+            }
+        })
+            .then(response => {
+                const updatedData = data.filter(item => item.id !== id);
+                setData(updatedData);
+                toast.success('Location removed successfully.');
+            })
+            .catch(error => {
+                console.error(error);
+                toast.error('An error occurred while deleting data.');
+            });
+    }
+
+    function handleCommunity(id, name) {
         const location_name = encodeURIComponent(`${name}`);
         navigate(`/settings/locations/communities/${id}/${location_name}`);
     }
@@ -147,6 +246,7 @@ function Locations() {
                             <tr>
                                 <th>Image</th>
                                 <th>Name</th>
+                                <th>Communities</th>
                                 <th>Action</th>
                             </tr>
                             </thead>
@@ -168,10 +268,24 @@ function Locations() {
                                         </td>
                                         <td>{data.name}</td>
                                         <td>
-                                               <button className="btn btn-primary btn-sm mx-1"
+                                            <button className="btn btn-primary btn-sm mx-1"
                                                     onClick={() => handleCommunity(data.id, data.name)}>
                                                 Communities
                                             </button>
+                                        </td>
+                                        <td>
+                                            <button className="btn btn-warning btn-sm mx-1" onClick={() => {
+                                                setUpdateId(data.id)
+                                                setFormData({
+                                                    name: data.name,
+                                                    image: data.image,
+                                                });
+                                                setEditModal(true)
+                                            }}><i className='fas fa-edit'></i></button>
+                                            <button className="btn btn-danger btn-sm"
+                                                    onClick={() => confirmDeleteData(data.id, data.name)}>
+                                                <i
+                                                    className='fas fa-trash-alt'></i></button>
                                         </td>
                                     </tr>
                                 )))}
@@ -247,6 +361,85 @@ function Locations() {
                         handleAddData();
                     }}>
                         Confirm
+                    </Button>
+                </Modal.Footer>
+            </Modal>
+
+            <Modal
+                size="lg"
+                show={showEditModal}
+                onHide={() => setEditModal(false)}
+                aria-labelledby="example-modal-sizes-title-lg"
+            >
+                <Modal.Header closeButton>
+                    <Modal.Title id="example-modal-sizes-title-lg">
+                        Edit Location Details
+                    </Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    <form onSubmit={confirmEditData} encType="multipart/form-data">
+                        <label className="form-label">Location Name</label>
+                        <input className="form-control" type="text" name="location_name" id="location_name"
+                               placeholder="Enter Location Name"
+                               value={formData.name}
+                               onChange={(e) => setFormData({...formData, name: e.target.value})}
+                               required/>
+                        <label className="form-label">Image</label>
+                        <input className="form-control" type="file" name="image" id="image"/>
+                        <div className="align-content-end">
+                            <button className="btn btn-primary float-end mt-3" disabled={isModifying}
+                            >{isModifying ? <i className="fa fa-spinner fa-spin"></i> : "Update"}
+                            </button>
+                        </div>
+                    </form>
+                </Modal.Body>
+            </Modal>
+
+            <Modal show={showEditConfrimModal} onHide={() => setEditConfirmModal(false)} backdrop='static'>
+                <Modal.Header>
+                    <Modal.Title>Confirm Location Details</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    <p><strong>Location Name:</strong> {formData.name}</p>
+                    {fileUrl ? (
+                        <>
+                            <img src={fileUrl} alt="brand_logo" style={{maxWidth: '100%', height: 'auto'}}/>
+                        </>
+                    ) : null}
+
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={() => {
+                        setEditConfirmModal(false);
+                        setModifying(false);
+                    }}>
+                        Cancel
+                    </Button>
+                    <Button variant="primary" onClick={() => {
+                        setEditConfirmModal(false);
+                        handleEditData();
+                    }}>
+                        Confirm
+                    </Button>
+                </Modal.Footer>
+            </Modal>
+
+            <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)} backdrop='static'>
+                <Modal.Header>
+                    <Modal.Title>Delete Location</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    <p>Are you sure you want to delete {deleteDataName}?</p>
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>
+                        Cancel
+                    </Button>
+                    <Button variant="danger" onClick={() => {
+                        handleDeleteData(deleteDataId);
+                        setShowDeleteModal(false);
+                    }}>
+                        Delete
                     </Button>
                 </Modal.Footer>
             </Modal>

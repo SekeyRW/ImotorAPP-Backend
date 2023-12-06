@@ -9,6 +9,8 @@ class UserSchema(ma.SQLAlchemyAutoSchema):
         model = User
         load_instance = True
 
+    verified_name = fields.String(attribute='verified_name')
+
 
 class AdminSchema(ma.SQLAlchemyAutoSchema):
     class Meta:

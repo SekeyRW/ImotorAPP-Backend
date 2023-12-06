@@ -2,6 +2,10 @@ import uuid
 from datetime import datetime
 from . import db
 
+USER_VERIFIED_MAPPING = {
+    1: "Verified",
+    0: "Unverified",
+}
 
 class Admin(db.Model):
     __tablename__ = 'admin'
@@ -39,6 +43,9 @@ class User(db.Model):
     updated_by = db.Column(db.String(255))
     updated_date = db.Column(db.DateTime(timezone=True))
 
+    @property
+    def verified_name(self):
+        return USER_VERIFIED_MAPPING.get(self.verified, "Unverified")
 
 class RefreshToken(db.Model):
     __tablename__ = 'refresh_tokens'
@@ -185,11 +192,13 @@ class HeavyVehicles(db.Model):
     type_1 = db.Column(db.String(255))
     type_2 = db.Column(db.String(255))
     fuel_type = db.Column(db.String(255))
+    seller_type = db.Column(db.String(255))
+    warranty = db.Column(db.String(255))
     no_of_cylinders = db.Column(db.String(255))
     body_condition = db.Column(db.String(255))
     mechanical_condition = db.Column(db.String(255))
     capacity_weight = db.Column(db.String(255))
-    horse_condition = db.Column(db.String(255))
+    horse_power = db.Column(db.String(255))
     created_by = db.Column(db.String(255))
     created_date = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
     updated_by = db.Column(db.String(255))

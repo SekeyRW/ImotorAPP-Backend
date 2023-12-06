@@ -1,9 +1,9 @@
-import ReactPaginate from "react-paginate";
 import {useEffect, useState} from "react";
 import axios from "axios";
-import Loading from "../Others/Loading";
+import Loading from "../../Others/Loading";
+import ReactPaginate from "react-paginate";
 
-function Users() {
+function HeavyVehicleListings() {
     const token = localStorage.getItem("token");
     const [pageNumber, setPageNumber] = useState(0);
     const [pageSize, setPageSize] = useState(10);
@@ -18,7 +18,7 @@ function Users() {
     };
 
     useEffect(() => {
-        axios.get(`${process.env.REACT_APP_API_URL}/admin/users-view?page=${pageNumber + 1}&page_size=${pageSize}&search=${searchTerm}`, {
+        axios.get(`${process.env.REACT_APP_API_URL}/admin/heavy-vehicle-listing-view?page=${pageNumber + 1}&page_size=${pageSize}&search=${searchTerm}`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -40,18 +40,18 @@ function Users() {
             <Loading/>
         );
     }
-
     return (
         <>
-            <h3 className="text-white mb-3 mt-3 mx-4 bg-gradient-primary pt-4 pb-4 px-4 rounded-2">Users</h3>
+            <h3 className="text-white mb-3 mt-3 mx-4 bg-gradient-primary pt-4 pb-4 px-4 rounded-2">Heavy Vehicle
+                Listings</h3>
             <div className="card shadow border-primary mb-3 mx-4">
                 <div className="card-header">
-                    <p className="text-primary m-0 fw-bold d-inline">User's Information</p>
+                    <p className="text-primary m-0 fw-bold d-inline">Heavy Vehicle's Information</p>
                 </div>
                 <div className="card-body rounded-3">
                     <div className="row g-3">
                         <div className='col-md-11'>
-                            <input type="text" className="form-control" placeholder="Search User Email!"
+                            <input type="text" className="form-control" placeholder="Search Heavy Vehicle Title!"
                                    aria-label="Search"
                                    aria-describedby="basic-addon2" value={searchTerm}
                                    onChange={e => setSearchTerm(e.target.value)}/>
@@ -75,14 +75,14 @@ function Users() {
                         <table className="table my-0" id="dataTable">
                             <thead>
                             <tr>
-                                <th>Profile Picture</th>
-                                <th>Email</th>
-                                <th>First Name</th>
-                                <th>Last Name</th>
-                                <th>Contact Number</th>
-                                <th>Whats App Number</th>
-                                <th>Viber Number</th>
-                                <th>is Verified</th>
+                                <th>Featured Image</th>
+                                <th>Vin</th>
+                                <th>Title</th>
+                                <th>Price</th>
+                                <th>Model</th>
+                                <th>Model Year</th>
+                                <th>Variant</th>
+                                <th>Mileage</th>
                             </tr>
                             </thead>
                             <tbody className='table-group-divider'>
@@ -94,20 +94,22 @@ function Users() {
                                 data.map((data) => (
                                     <tr key={data.id}>
                                         <td>
-                                            <img src={`${process.env.REACT_APP_API_URL}/uploaded_img/${data.profile_picture}`}
-                                                 className='rounded-1 img-fluid img-thumbnail'
-                                                 alt="Thumbnail" style={{
+                                            <img
+                                                src={`${process.env.REACT_APP_API_URL}/uploaded_img/${data.featured_image}`}
+                                                className='rounded-1 img-fluid img-thumbnail'
+                                                alt="Thumbnail" style={{
                                                 width: '50px',
                                                 height: '50px',
                                             }}/>
                                         </td>
-                                        <td>{data.email}</td>
-                                        <td>{data.first_name}</td>
-                                        <td>{data.last_name}</td>
-                                        <td>{data.contact_number}</td>
-                                        <td>{data.whats_app_number}</td>
-                                        <td>{data.viber_number}</td>
-                                        <td>{data.verified_name}</td>
+                                        <td>{data.vin}</td>
+                                        <td>{data.title}</td>
+                                        <td>{data.price}</td>
+                                        <td>{data.model}</td>
+                                        <td>{data.model_year}</td>
+                                        <td>{data.variant}</td>
+                                        <td>{data.mileage}</td>
+
                                     </tr>
                                 )))}
                             </tbody>
@@ -136,4 +138,4 @@ function Users() {
     )
 }
 
-export default Users;
+export default HeavyVehicleListings;
