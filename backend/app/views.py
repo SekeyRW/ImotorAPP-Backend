@@ -737,7 +737,7 @@ def car_create():
         resize_file = resize_image(file, max_size_kb=1024)
         filename = secure_filename(file.filename)
         file_name = str(uuid.uuid1()) + '_' + filename
-        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], file_name)
         resize_file.save(filepath, format='JPEG')
 
     title = f"{new_data['model']} {new_data['model_year']}"
@@ -1212,7 +1212,7 @@ def motorcycle_create():
         resize_file = resize_image(file, max_size_kb=1024)
         filename = secure_filename(file.filename)
         file_name = str(uuid.uuid1()) + '_' + filename
-        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], file_name)
         resize_file.save(filepath, format='JPEG')
 
     title = f"{new_data['model']} {new_data['model_year']}"
@@ -1671,7 +1671,7 @@ def boat_create():
         resize_file = resize_image(file, max_size_kb=1024)
         filename = secure_filename(file.filename)
         file_name = str(uuid.uuid1()) + '_' + filename
-        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], file_name)
         resize_file.save(filepath, format='JPEG')
 
     title = f"{new_data['model']} {new_data['model_year']}"
@@ -2127,7 +2127,7 @@ def heavy_vehicle_create():
         resize_file = resize_image(file, max_size_kb=1024)
         filename = secure_filename(file.filename)
         file_name = str(uuid.uuid1()) + '_' + filename
-        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], filename)
+        filepath = os.path.join(current_app.config['UPLOAD_FOLDER'], file_name)
         resize_file.save(filepath, format='JPEG')
 
     title = f"{new_data['model']} {new_data['model_year']}"
