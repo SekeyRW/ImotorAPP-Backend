@@ -1,9 +1,10 @@
-import hashlib
 import random
 import string
 import threading
 from datetime import datetime, timedelta
+from os.path import join
 
+import jwt as pyjwt
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import create_access_token, create_refresh_token
 from flask_mail import Message
@@ -71,6 +72,48 @@ def google_auth_callback():
         {"access_token": access_token, 'refresh_token': refresh_token, 'message': 'Logged in successfully'}), 200
 
 
+# APPLE LOGIN (CLIENT SIDE)
+@auth.route('/apple/callback', methods=['POST'])
+def apple_auth_callback():
+    # Retrieve the 'id_token' from the form data
+    id_token = request.form.get('id_token')
+
+    try:
+        if id_token is None:
+            return jsonify({'message': 'ID token not found in request data'}), 400
+
+        # Decode and verify the 'id_token' received from Apple
+        decoded_token = pyjwt.decode(id_token, options={"verify_signature": False})
+
+        user = User.query.filter_by(email=decoded_token.get('email').lower()).first()
+        if not user:
+            new_user = User(
+                email=decoded_token.get('email'),
+                verified=1,
+                profile_picture='default_profile_picture.jpg'
+            )
+            db.session.add(new_user)
+            db.session.commit()
+            user = new_user
+
+        access_token = create_access_token(identity={
+            "email": user.email,
+            "id": user.id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+        })
+        refresh_token_exp = datetime.utcnow() + timedelta(days=30)
+        refresh_token_duration = refresh_token_exp - datetime.utcnow()
+        refresh_token = create_refresh_token(identity={"user_id": user.id}, expires_delta=refresh_token_duration)
+        new_refresh_token = RefreshToken(token=refresh_token, user_id=user.id, expires_at=refresh_token_exp)
+        db.session.add(new_refresh_token)
+        db.session.commit()
+        return jsonify(
+        {"access_token": access_token, 'refresh_token': refresh_token, 'message': 'Logged in successfully'}), 200
+    except Exception as e:
+        return jsonify({'message': 'Apple authentication failed', 'error': str(e)}), 401
+
+
 # CODE GENERATOR
 def generate_verification_code():
     # Generate a 6-digit random code
@@ -136,7 +179,7 @@ def send_verification_code(verification_code, user_email, app):
                                 <h2>Email Verification</h2>
                             </div>
                             <div style="font-size: 24px; font-weight: bold; text-align: center; padding: 15px; border: 2px dashed #ccc; border-radius: 5px; background-color: #f9f9f9;">
-                                Your verification code is: <span> { verification_code }</span>
+                                Your verification code is: <span> {verification_code}</span>
                             </div>
                             <div style="text-align: center; margin-top: 20px;">
                                 Please use the above verification code to verify your email address.
@@ -180,6 +223,7 @@ def check_verification():
     else:
         return jsonify({'error': 'User not found.'}), 404
 
+
 # Manual Login (Client Side)
 @auth.route('/client/login', methods=['POST'])
 def client_login():
@@ -208,6 +252,7 @@ def client_login():
     return jsonify(
         {"access_token": access_token, 'refresh_token': refresh_token, 'message': 'Logged in successfully'}), 200
 
+
 def refresh_token_is_valid(refresh_token):
     now = datetime.utcnow()
     refresh_token_record = RefreshToken.query.filter_by(token=refresh_token).first()
@@ -234,9 +279,10 @@ def refresh_token():
         return {'message': 'Invalid refresh token'}, 401
 
 
-#Forgot Password
+# Forgot Password
 def generate_reset_token():
     return ''.join(random.choices(string.ascii_letters + string.digits, k=6))
+
 
 @auth.route('/forgot_password', methods=['POST'])
 def forgot_password():
@@ -262,6 +308,7 @@ def forgot_password():
     else:
         return jsonify({'error': 'User not found.'}), 404
 
+
 def send_reset_password_link(reset_link, user_email, app):
     with app.app_context():
         msg = Message(f'Password Reset', recipients=[f'{user_email}'])
@@ -278,7 +325,7 @@ def send_reset_password_link(reset_link, user_email, app):
                             <div style="padding: 20px; background-color: #f9f9f9; border-radius: 5px;">
                                 <p style="margin-bottom: 20px;">You've requested to reset your password. Click the button below to reset:</p>
                                 <p style="text-align: center; margin: 0;">
-                                    <a href="{ reset_link }" style="text-decoration: none; background-color: #007bff; color: #fff; padding: 10px 20px; border-radius: 5px; display: inline-block;">Reset Password</a>
+                                    <a href="{reset_link}" style="text-decoration: none; background-color: #007bff; color: #fff; padding: 10px 20px; border-radius: 5px; display: inline-block;">Reset Password</a>
                                 </p>
                                 <p style="margin-top: 20px;">If you didn't request a password reset, you can ignore this email.</p>
                             </div>
@@ -288,6 +335,7 @@ def send_reset_password_link(reset_link, user_email, app):
         """
         msg.mimetype = 'text/html'
         mail.send(msg)
+
 
 @auth.route('/reset_password', methods=['POST'])
 def reset_password():
