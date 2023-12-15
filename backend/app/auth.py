@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from os.path import join
 
 import jwt as pyjwt
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, redirect
 from flask_jwt_extended import create_access_token, create_refresh_token
 from flask_mail import Message
 
@@ -108,8 +108,7 @@ def apple_auth_callback():
         new_refresh_token = RefreshToken(token=refresh_token, user_id=user.id, expires_at=refresh_token_exp)
         db.session.add(new_refresh_token)
         db.session.commit()
-        return jsonify(
-        {"access_token": access_token, 'refresh_token': refresh_token, 'message': 'Logged in successfully'}), 200
+        return redirect(f'https://imotor-app.onrender.com/main/landing?access_token={access_token}&refresh_token={refresh_token}')
     except Exception as e:
         return jsonify({'message': 'Apple authentication failed', 'error': str(e)}), 401
 

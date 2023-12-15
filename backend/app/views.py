@@ -7,7 +7,7 @@ from PIL import Image
 from flask import Blueprint, jsonify, request, send_from_directory, current_app, g
 from flask_jwt_extended import jwt_required
 from slugify import slugify
-from sqlalchemy import or_
+from sqlalchemy import or_, and_
 from werkzeug.utils import secure_filename
 
 from . import db, bcrypt, allowed_file
@@ -652,20 +652,36 @@ def all_car_view():
     page_size = request.args.get('page_size', 10, type=int)
 
     search = request.args.get('search', '', type=str)
+    brand = request.args.get('brand', type=str)
+    startPrice = request.args.get('startPrice', '', type=str)
+    endPrice = request.args.get('endPrice', '', type=str)
+    startModelYear = request.args.get('startModelYear', '', type=str)
+    endModelYear = request.args.get('endModelYear', '', type=str)
+    startMileage = request.args.get('startMileage', '', type=str)
+    endMileage = request.args.get('endMileage', '', type=str)
 
     data = Listings.query.filter_by(vehicle_type='car')
 
-    if search:
-        search_words = search.split(',')
+    if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (startModelYear and endModelYear):
+        filter_conditions = []
 
-        def search_filter(word):
-            word = word.strip()
-            return or_(
-                Listings.title.ilike(f"%{word}%"),
-            )
+        if search:
+            search_conditions = Listings.title.ilike(f"%{search}%")
+            filter_conditions.append(search_conditions)
+        if brand:
+            brand_conditions = Listings.brand_id.ilike(f"%{brand}")
+            filter_conditions.append(brand_conditions)
+        if startPrice and endPrice:
+            price_condition = Listings.price.between(startPrice, endPrice)
+            filter_conditions.append(price_condition)
+        if startMileage and endMileage:
+            mileage_condition = Listings.mileage.between(startMileage, endMileage)
+            filter_conditions.append(mileage_condition)
+        if startModelYear and endModelYear:
+            modelYear_condition = Listings.model_year.between(startModelYear, endModelYear)
+            filter_conditions.append(modelYear_condition)
 
-        filter_conditions = [search_filter(word) for word in search_words]
-        data = data.filter(*filter_conditions)
+        data = data.filter(and_(*filter_conditions))
 
     data = data.order_by(Listings.id.desc())
 
@@ -688,6 +704,7 @@ def user_car_view(id):
     search = request.args.get('search', '', type=str)
 
     data = Listings.query.filter_by(vehicle_type='car', user_id=id)
+
 
     user = User.query.get(id)
     if not user:
@@ -725,10 +742,6 @@ def user_car_view(id):
 @current_user_required
 def car_create():
     new_data = request.form
-    existing_data = Listings.query.filter_by(vin=new_data['vin'].lower(), vehicle_type='car').first()
-
-    if existing_data is not None:
-        return jsonify({'message': 'Car Already Exists!'}), 400
 
     file_name = None
     file = request.files.get('featured_image')
@@ -1127,20 +1140,37 @@ def all_motorcycle_view():
     page_size = request.args.get('page_size', 10, type=int)
 
     search = request.args.get('search', '', type=str)
+    brand = request.args.get('brand', type=str)
+    startPrice = request.args.get('startPrice', '', type=str)
+    endPrice = request.args.get('endPrice', '', type=str)
+    startModelYear = request.args.get('startModelYear', '', type=str)
+    endModelYear = request.args.get('endModelYear', '', type=str)
+    startMileage = request.args.get('startMileage', '', type=str)
+    endMileage = request.args.get('endMileage', '', type=str)
 
     data = Listings.query.filter_by(vehicle_type='motorcycle')
 
-    if search:
-        search_words = search.split(',')
+    if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
+            startModelYear and endModelYear):
+        filter_conditions = []
 
-        def search_filter(word):
-            word = word.strip()
-            return or_(
-                Listings.title.ilike(f"%{word}%"),
-            )
+        if search:
+            search_conditions = Listings.title.ilike(f"%{search}%")
+            filter_conditions.append(search_conditions)
+        if brand:
+            brand_conditions = Listings.brand_id.ilike(f"%{brand}")
+            filter_conditions.append(brand_conditions)
+        if startPrice and endPrice:
+            price_condition = Listings.price.between(startPrice, endPrice)
+            filter_conditions.append(price_condition)
+        if startMileage and endMileage:
+            mileage_condition = Listings.mileage.between(startMileage, endMileage)
+            filter_conditions.append(mileage_condition)
+        if startModelYear and endModelYear:
+            modelYear_condition = Listings.model_year.between(startModelYear, endModelYear)
+            filter_conditions.append(modelYear_condition)
 
-        filter_conditions = [search_filter(word) for word in search_words]
-        data = data.filter(*filter_conditions)
+        data = data.filter(and_(*filter_conditions))
 
     data = data.order_by(Listings.id.desc())
 
@@ -1200,10 +1230,6 @@ def user_motorcycle_view(id):
 @current_user_required
 def motorcycle_create():
     new_data = request.form
-    existing_data = Listings.query.filter_by(vin=new_data['vin'].lower(), vehicle_type='motorcycle').first()
-
-    if existing_data is not None:
-        return jsonify({'message': 'Motorcycle Already Exists!'}), 400
 
     file_name = None
     file = request.files.get('featured_image')
@@ -1586,20 +1612,37 @@ def all_boat_view():
     page_size = request.args.get('page_size', 10, type=int)
 
     search = request.args.get('search', '', type=str)
+    brand = request.args.get('brand', type=str)
+    startPrice = request.args.get('startPrice', '', type=str)
+    endPrice = request.args.get('endPrice', '', type=str)
+    startModelYear = request.args.get('startModelYear', '', type=str)
+    endModelYear = request.args.get('endModelYear', '', type=str)
+    startMileage = request.args.get('startMileage', '', type=str)
+    endMileage = request.args.get('endMileage', '', type=str)
 
     data = Listings.query.filter_by(vehicle_type='boat')
 
-    if search:
-        search_words = search.split(',')
+    if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
+            startModelYear and endModelYear):
+        filter_conditions = []
 
-        def search_filter(word):
-            word = word.strip()
-            return or_(
-                Listings.title.ilike(f"%{word}%"),
-            )
+        if search:
+            search_conditions = Listings.title.ilike(f"%{search}%")
+            filter_conditions.append(search_conditions)
+        if brand:
+            brand_conditions = Listings.brand_id.ilike(f"%{brand}")
+            filter_conditions.append(brand_conditions)
+        if startPrice and endPrice:
+            price_condition = Listings.price.between(startPrice, endPrice)
+            filter_conditions.append(price_condition)
+        if startMileage and endMileage:
+            mileage_condition = Listings.mileage.between(startMileage, endMileage)
+            filter_conditions.append(mileage_condition)
+        if startModelYear and endModelYear:
+            modelYear_condition = Listings.model_year.between(startModelYear, endModelYear)
+            filter_conditions.append(modelYear_condition)
 
-        filter_conditions = [search_filter(word) for word in search_words]
-        data = data.filter(*filter_conditions)
+        data = data.filter(and_(*filter_conditions))
 
     data = data.order_by(Listings.id.desc())
 
@@ -1659,10 +1702,6 @@ def user_boat_view(id):
 @current_user_required
 def boat_create():
     new_data = request.form
-    existing_data = Listings.query.filter_by(vin=new_data['vin'].lower(), vehicle_type='boat').first()
-
-    if existing_data is not None:
-        return jsonify({'message': 'Boat Already Exists!'}), 400
 
     file_name = None
     file = request.files.get('featured_image')
@@ -2044,20 +2083,37 @@ def all_heavy_vehicle_view():
     page_size = request.args.get('page_size', 10, type=int)
 
     search = request.args.get('search', '', type=str)
+    brand = request.args.get('brand', type=str)
+    startPrice = request.args.get('startPrice', '', type=str)
+    endPrice = request.args.get('endPrice', '', type=str)
+    startModelYear = request.args.get('startModelYear', '', type=str)
+    endModelYear = request.args.get('endModelYear', '', type=str)
+    startMileage = request.args.get('startMileage', '', type=str)
+    endMileage = request.args.get('endMileage', '', type=str)
 
     data = Listings.query.filter_by(vehicle_type='heavy vehicle')
 
-    if search:
-        search_words = search.split(',')
+    if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
+            startModelYear and endModelYear):
+        filter_conditions = []
 
-        def search_filter(word):
-            word = word.strip()
-            return or_(
-                Listings.title.ilike(f"%{word}%"),
-            )
+        if search:
+            search_conditions = Listings.title.ilike(f"%{search}%")
+            filter_conditions.append(search_conditions)
+        if brand:
+            brand_conditions = Listings.brand_id.ilike(f"%{brand}")
+            filter_conditions.append(brand_conditions)
+        if startPrice and endPrice:
+            price_condition = Listings.price.between(startPrice, endPrice)
+            filter_conditions.append(price_condition)
+        if startMileage and endMileage:
+            mileage_condition = Listings.mileage.between(startMileage, endMileage)
+            filter_conditions.append(mileage_condition)
+        if startModelYear and endModelYear:
+            modelYear_condition = Listings.model_year.between(startModelYear, endModelYear)
+            filter_conditions.append(modelYear_condition)
 
-        filter_conditions = [search_filter(word) for word in search_words]
-        data = data.filter(*filter_conditions)
+        data = data.filter(and_(*filter_conditions))
 
     data = data.order_by(Listings.id.desc())
 
@@ -2115,10 +2171,6 @@ def user_heavy_vehicle_view(id):
 @current_user_required
 def heavy_vehicle_create():
     new_data = request.form
-    existing_data = Listings.query.filter_by(vin=new_data['vin'].lower(), vehicle_type='heavy vehicle').first()
-
-    if existing_data is not None:
-        return jsonify({'message': 'Heavy Vehicle Already Exists!'}), 400
 
     file_name = None
     file = request.files.get('featured_image')
