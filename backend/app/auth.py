@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from os.path import join
 
 import jwt as pyjwt
-from flask import Blueprint, request, jsonify, current_app, redirect
+from flask import Blueprint, request, jsonify, current_app, redirect, json
 from flask_jwt_extended import create_access_token, create_refresh_token
 from flask_mail import Message
 
@@ -75,20 +75,20 @@ def google_auth_callback():
 # APPLE LOGIN (CLIENT SIDE)
 @auth.route('/apple/callback', methods=['POST'])
 def apple_auth_callback():
-    # Retrieve the 'id_token' from the form data
-    id_token = request.form.get('id_token')
+    form_data = request.form
+    user_info = form_data.get('user')
+    if user_info:
+        user_json = json.loads(user_info)  # Parse the 'user' JSON string
+        first_name = user_json.get('name', {}).get('firstName')
+        last_name = user_json.get('name', {}).get('lastName')
+        email = user_json.get('email')
 
-    try:
-        if id_token is None:
-            return jsonify({'message': 'ID token not found in request data'}), 400
-
-        # Decode and verify the 'id_token' received from Apple
-        decoded_token = pyjwt.decode(id_token, options={"verify_signature": False})
-
-        user = User.query.filter_by(email=decoded_token.get('email').lower()).first()
+        user = User.query.filter_by(email=email.lower()).first()
         if not user:
             new_user = User(
-                email=decoded_token.get('email'),
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
                 verified=1,
                 profile_picture='default_profile_picture.jpg'
             )
@@ -108,9 +108,31 @@ def apple_auth_callback():
         new_refresh_token = RefreshToken(token=refresh_token, user_id=user.id, expires_at=refresh_token_exp)
         db.session.add(new_refresh_token)
         db.session.commit()
+        return redirect(
+            f'https://imotor-app.onrender.com/main/landing?access_token={access_token}&refresh_token={refresh_token}')
+    else:
+        id_token = form_data.get('id_token')
+        if id_token is None:
+            return jsonify({'message': 'ID token not found in request data'}), 400
+
+        # Decode and verify the 'id_token' received from Apple
+        decoded_token = pyjwt.decode(id_token, options={"verify_signature": False})
+
+        user = User.query.filter_by(email=decoded_token.get('email').lower()).first()
+
+        access_token = create_access_token(identity={
+            "email": user.email,
+            "id": user.id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+        })
+        refresh_token_exp = datetime.utcnow() + timedelta(days=30)
+        refresh_token_duration = refresh_token_exp - datetime.utcnow()
+        refresh_token = create_refresh_token(identity={"user_id": user.id}, expires_delta=refresh_token_duration)
+        new_refresh_token = RefreshToken(token=refresh_token, user_id=user.id, expires_at=refresh_token_exp)
+        db.session.add(new_refresh_token)
+        db.session.commit()
         return redirect(f'https://imotor-app.onrender.com/main/landing?access_token={access_token}&refresh_token={refresh_token}')
-    except Exception as e:
-        return jsonify({'message': 'Apple authentication failed', 'error': str(e)}), 401
 
 
 # CODE GENERATOR

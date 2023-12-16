@@ -644,6 +644,37 @@ def users_view():
 
 ############################################################## CLIENT SIDE #############################################
 
+###################### SEARCH ALL LISTING ENDPOINT ####################
+@views.route('/client/all-listing-search', methods=['GET'])
+def all_listing_search():
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+    search = request.args.get('search', '', type=str)
+
+    data = Listings.query
+
+    if search:
+        filter_conditions = []
+
+        if search:
+            search_conditions = Listings.title.ilike(f"%{search}%")
+            filter_conditions.append(search_conditions)
+
+        data = data.filter(and_(*filter_conditions))
+
+    data = data.order_by(Listings.id.desc())
+
+    data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
+
+    result = listings_schema.dump(data_paginated)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+##################### END SEARCH ALL LISTING ENDPOINT #################
+
 ###################### CAR LISTING ENDPOINT ###########################
 # All Car View
 @views.route('/client/all-car-view', methods=['GET'])
