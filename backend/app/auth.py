@@ -2,7 +2,6 @@ import random
 import string
 import threading
 from datetime import datetime, timedelta
-from os.path import join
 
 import jwt as pyjwt
 from flask import Blueprint, request, jsonify, current_app, redirect, json
@@ -56,20 +55,94 @@ def google_auth_callback():
         db.session.commit()
         user = new_user
 
-    access_token = create_access_token(identity={
-        "email": user.email,
-        "id": user.id,
-        "first_name": user.first_name,
-        "last_name": user.last_name,
-    })
-    refresh_token_exp = datetime.utcnow() + timedelta(days=30)
-    refresh_token_duration = refresh_token_exp - datetime.utcnow()
-    refresh_token = create_refresh_token(identity={"user_id": user.id}, expires_delta=refresh_token_duration)
-    new_refresh_token = RefreshToken(token=refresh_token, user_id=user.id, expires_at=refresh_token_exp)
-    db.session.add(new_refresh_token)
-    db.session.commit()
-    return jsonify(
-        {"access_token": access_token, 'refresh_token': refresh_token, 'message': 'Logged in successfully'}), 200
+        access_token = create_access_token(identity={
+            "email": user.email,
+            "id": user.id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+        })
+        refresh_token_exp = datetime.utcnow() + timedelta(days=30)
+        refresh_token_duration = refresh_token_exp - datetime.utcnow()
+        refresh_token = create_refresh_token(identity={"user_id": user.id}, expires_delta=refresh_token_duration)
+        new_refresh_token = RefreshToken(token=refresh_token, user_id=user.id, expires_at=refresh_token_exp)
+        db.session.add(new_refresh_token)
+        db.session.commit()
+        return jsonify(
+            {"access_token": access_token, 'refresh_token': refresh_token, 'message': 'Logged in successfully'}), 200
+    else:
+        access_token = create_access_token(identity={
+            "email": user.email,
+            "id": user.id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+        })
+        refresh_token_exp = datetime.utcnow() + timedelta(days=30)
+        refresh_token_duration = refresh_token_exp - datetime.utcnow()
+        refresh_token = create_refresh_token(identity={"user_id": user.id}, expires_delta=refresh_token_duration)
+        new_refresh_token = RefreshToken(token=refresh_token, user_id=user.id, expires_at=refresh_token_exp)
+        db.session.add(new_refresh_token)
+        db.session.commit()
+        return jsonify(
+            {"access_token": access_token, 'refresh_token': refresh_token, 'message': 'Logged in successfully'}), 200
+
+
+# APPLE LOGIN (CLIENT SIDE) NATIVE
+@auth.route('/apple/native/callback', methods=['POST'])
+def apple_auth_native_callback():
+    json_data = request.json
+    email = json_data.get('email')
+    family_name = json_data.get('fullName', {}).get('familyName')
+    given_name = json_data.get('fullName', {}).get('givenName')
+    identity_token = json_data.get('identityToken')
+
+    if email:
+        user = User.query.filter_by(email=email.lower()).first()
+        if not user:
+            new_user = User(
+                email=email,
+                first_name=given_name,
+                last_name=family_name,
+                verified=1,
+                profile_picture='default_profile_picture.jpg'
+            )
+            db.session.add(new_user)
+            db.session.commit()
+            user = new_user
+
+        access_token = create_access_token(identity={
+            "email": user.email,
+            "id": user.id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+        })
+        refresh_token_exp = datetime.utcnow() + timedelta(days=30)
+        refresh_token_duration = refresh_token_exp - datetime.utcnow()
+        refresh_token = create_refresh_token(identity={"user_id": user.id}, expires_delta=refresh_token_duration)
+        new_refresh_token = RefreshToken(token=refresh_token, user_id=user.id, expires_at=refresh_token_exp)
+        db.session.add(new_refresh_token)
+        db.session.commit()
+        return jsonify(
+            {"access_token": access_token, 'refresh_token': refresh_token, 'message': 'Logged in successfully'}), 200
+    else:
+        decoded_token = pyjwt.decode(identity_token, options={"verify_signature": False})
+        user = User.query.filter_by(email=decoded_token.get('email').lower()).first()
+        if user is None:
+            return jsonify({'message': 'User is not registered'}), 400
+
+        access_token = create_access_token(identity={
+            "email": user.email,
+            "id": user.id,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+        })
+        refresh_token_exp = datetime.utcnow() + timedelta(days=30)
+        refresh_token_duration = refresh_token_exp - datetime.utcnow()
+        refresh_token = create_refresh_token(identity={"user_id": user.id}, expires_delta=refresh_token_duration)
+        new_refresh_token = RefreshToken(token=refresh_token, user_id=user.id, expires_at=refresh_token_exp)
+        db.session.add(new_refresh_token)
+        db.session.commit()
+        return jsonify(
+            {"access_token": access_token, 'refresh_token': refresh_token, 'message': 'Logged in successfully'}), 200
 
 
 # APPLE LOGIN (CLIENT SIDE)
@@ -109,7 +182,7 @@ def apple_auth_callback():
         db.session.add(new_refresh_token)
         db.session.commit()
         return redirect(
-            f'https://imotor-app.onrender.com/main/landing?access_token={access_token}&refresh_token={refresh_token}')
+            f'{current_app.config["FRONTEND_URL"]}/imotor/validating-token?access_token={access_token}&refresh_token={refresh_token}')
     else:
         id_token = form_data.get('id_token')
         if id_token is None:
@@ -119,6 +192,9 @@ def apple_auth_callback():
         decoded_token = pyjwt.decode(id_token, options={"verify_signature": False})
 
         user = User.query.filter_by(email=decoded_token.get('email').lower()).first()
+
+        if user is None:
+            return jsonify({'message': 'User is not registered'}), 400
 
         access_token = create_access_token(identity={
             "email": user.email,
@@ -132,7 +208,8 @@ def apple_auth_callback():
         new_refresh_token = RefreshToken(token=refresh_token, user_id=user.id, expires_at=refresh_token_exp)
         db.session.add(new_refresh_token)
         db.session.commit()
-        return redirect(f'https://imotor-app.onrender.com/main/landing?access_token={access_token}&refresh_token={refresh_token}')
+        return redirect(
+            f'{current_app.config["FRONTEND_URL"]}/imotor/validating-token?access_token={access_token}&refresh_token={refresh_token}')
 
 
 # CODE GENERATOR

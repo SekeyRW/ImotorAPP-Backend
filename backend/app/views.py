@@ -700,7 +700,8 @@ def all_car_view():
             search_conditions = Listings.title.ilike(f"%{search}%")
             filter_conditions.append(search_conditions)
         if brand:
-            brand_conditions = Listings.brand_id.ilike(f"%{brand}")
+            brand = int(brand)
+            brand_conditions = Listings.brand_id == brand
             filter_conditions.append(brand_conditions)
         if startPrice and endPrice:
             price_condition = Listings.price.between(startPrice, endPrice)
