@@ -2760,6 +2760,34 @@ def update_profile_picture(id):
 
     return jsonify({'message': f'Profile Picture updated successfully!', 'updated_data': updated_data}), 200
 
+@views.route('/delete/user/<int:id>', methods=['DELETE'])
+@jwt_required()
+@current_user_required
+def delete_user(id):
+    data = User.query.get(id)
+    if data is None:
+        return jsonify({'message': 'User not found.'}), 400
+
+    listing_data = Listings.query.filter_by(user_id=id)
+    for listing in listing_data:
+        listing_feature_image = listing.featured_image
+        if listing_feature_image:
+            image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], listing_feature_image)
+            if os.path.exists(image_path):
+                os.remove(image_path)
+        listing_image_data = ListingImage.query.filter_by(listing_id=listing.id)
+        for images in listing_image_data:
+            image_data = images.image
+            if image_data:
+                image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], image_data)
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+
+    db.session.delete(data)
+    db.session.commit()
+
+    return 'Success!', 200
+
 
 ############## END OF USER PROFILE ENDPOINTS #######################
 
