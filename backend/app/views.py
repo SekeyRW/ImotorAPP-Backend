@@ -13,8 +13,9 @@ from werkzeug.utils import secure_filename
 from . import db, bcrypt, allowed_file
 from .decorators import current_user_required
 from .models import Admin, Brand, Location, Community, Cars, Listings, ListingImage, SafetyFeatures, ListingAmenities, \
-    User, Motorcycle, Boats, HeavyVehicles
-from .schemas import BrandSchema, CommunitySchema, ListingsSchema, CarsSchema, UserSchema, ListingImageSchema
+    User, Motorcycle, Boats, HeavyVehicles, Favorites
+from .schemas import BrandSchema, CommunitySchema, ListingsSchema, CarsSchema, UserSchema, ListingImageSchema, \
+    FavoritesSchema
 
 views = Blueprint('views', __name__)
 
@@ -39,6 +40,9 @@ listing_images_schema = ListingImageSchema(many=True)
 
 car_schema = CarsSchema()
 cars_schema = CarsSchema(many=True)
+
+favorite_schema = FavoritesSchema()
+favorites_schema = FavoritesSchema(many=True)
 
 
 ####################################################################### ADMIN API ######################################
@@ -162,6 +166,7 @@ def brand_create():
     new_added_data = brand_schema.dump(new_data2)
     return jsonify({'message': 'Brand successfully added!', 'new_data': new_added_data}), 200
 
+
 # Brands Update
 @views.route('/admin/brand-update/<int:id>', methods=['PUT'])
 @jwt_required()
@@ -199,6 +204,7 @@ def brand_update(id):
     updated_data = brand_schema.dump(data)
     return jsonify({'message': 'Brand updated successfully!', 'updated_data': updated_data}), 200
 
+
 # Brands Delete
 @views.route('/admin/brand-delete/<int:id>', methods=['DELETE'])
 @jwt_required()
@@ -214,6 +220,7 @@ def brand_delete(id):
     db.session.delete(data)
     db.session.commit()
     return 'Success!', 200
+
 
 # Locations View
 @views.route('/admin/location-view', methods=['GET'])
@@ -282,6 +289,7 @@ def location_create():
     new_added_data = location_schema.dump(new_data2)
     return jsonify({'message': 'Location successfully added!', 'new_data': new_added_data}), 200
 
+
 # Location Update
 @views.route('/admin/location-update/<int:id>', methods=['PUT'])
 @jwt_required()
@@ -316,6 +324,7 @@ def location_update(id):
 
     updated_data = brand_schema.dump(data)
     return jsonify({'message': 'Location updated successfully!', 'updated_data': updated_data}), 200
+
 
 # Location Delete
 @views.route('/admin/location-delete/<int:id>', methods=['DELETE'])
@@ -408,6 +417,7 @@ def community_create(id):
     new_added_data = community_schema.dump(new_data2)
     return jsonify({'message': 'Community successfully added!', 'new_data': new_added_data}), 200
 
+
 # Community Update
 @views.route('/admin/community-update/<int:id>', methods=['PUT'])
 @jwt_required()
@@ -442,6 +452,7 @@ def community_update(id):
 
     updated_data = brand_schema.dump(data)
     return jsonify({'message': 'Community updated successfully!', 'updated_data': updated_data}), 200
+
 
 # Location Delete
 @views.route('/admin/community-delete/<int:id>', methods=['DELETE'])
@@ -498,6 +509,7 @@ def car_listing_view():
         "total": data.count()
     }), 200
 
+
 # Motorcycle LISTING INFORMATION
 @views.route('/admin/motorcycle-listing-view', methods=['GET'])
 @jwt_required()
@@ -533,6 +545,7 @@ def motorcycle_listing_view():
         "total": data.count()
     }), 200
 
+
 # boat LISTING INFORMATION
 @views.route('/admin/boat-listing-view', methods=['GET'])
 @jwt_required()
@@ -567,6 +580,7 @@ def boat_listing_view():
         "data": result,
         "total": data.count()
     }), 200
+
 
 # CAR LISTING INFORMATION
 @views.route('/admin/heavy-vehicle-listing-view', methods=['GET'])
@@ -641,7 +655,6 @@ def users_view():
     }), 200
 
 
-
 ############################################################## CLIENT SIDE #############################################
 
 ###################### SEARCH ALL LISTING ENDPOINT ####################
@@ -657,7 +670,10 @@ def all_listing_search():
         filter_conditions = []
 
         if search:
-            search_conditions = Listings.title.ilike(f"%{search}%")
+            search_conditions = or_(
+                Listings.title.ilike(f"%{search}%"),
+                Listings.brand.has(Brand.name.ilike(f"%{search}%"))
+            )
             filter_conditions.append(search_conditions)
 
         data = data.filter(and_(*filter_conditions))
@@ -673,7 +689,58 @@ def all_listing_search():
         "total": data.count()
     }), 200
 
+
 ##################### END SEARCH ALL LISTING ENDPOINT #################
+
+#################### FAVORITES FUNCTION ENDPOINT ###############################
+@views.route('/client/add-favorite/<int:id>', methods=['POST'])
+@jwt_required()
+@current_user_required
+def add_favorite(id):
+    if g.current_user['id']:
+        data = Favorites(user_id=g.current_user['id'], listing_id=id)
+        db.session.add(data)
+        db.session.commit()
+    else:
+        return jsonify({'message': 'Please log in to add favorite'}), 400
+    return jsonify({'message': 'Listing added to favorites successfully'}), 200
+
+
+@views.route('/client/remove-favorite/<int:id>', methods=['DELETE'])
+@jwt_required()
+@current_user_required
+def remove_favorite(id):
+    if g.current_user['id']:
+        favorite = Favorites.query.filter_by(user_id=g.current_user['id'], listing_id=id).first()
+        if favorite:
+            db.session.delete(favorite)
+            db.session.commit()
+            return jsonify({'message': 'Listing removed from favorites successfully'}), 200
+        else:
+            return jsonify({'message': 'Listing not found in favorites'}), 404
+    else:
+        return jsonify({'message': 'Please log in to add favorite'}), 400
+
+
+@views.route('/client/favorite-listings/<int:id>', methods=['GET'])
+@jwt_required()
+@current_user_required
+def get_favorite_listings(id):
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+
+    data = Favorites.query.filter_by(user_id=id)
+
+    data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
+
+    result = favorites_schema.dump(data_paginated)
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+
+##################### FAVORITES FUNCTION ENDPOINT #################
 
 ###################### CAR LISTING ENDPOINT ###########################
 # All Car View
@@ -693,7 +760,8 @@ def all_car_view():
 
     data = Listings.query.filter_by(vehicle_type='car')
 
-    if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (startModelYear and endModelYear):
+    if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
+            startModelYear and endModelYear):
         filter_conditions = []
 
         if search:
@@ -736,7 +804,6 @@ def user_car_view(id):
     search = request.args.get('search', '', type=str)
 
     data = Listings.query.filter_by(vehicle_type='car', user_id=id)
-
 
     user = User.query.get(id)
     if not user:
@@ -1812,6 +1879,7 @@ def boat_create():
     new_added_data = listing_schema.dump(listing_data)
     return jsonify({'message': 'Boat successfully listed!', 'new_data': new_added_data}), 200
 
+
 # Single Boat Update Information
 @views.route('/client/single-boat-view/update-information/<int:id>', methods=['PUT'])
 @jwt_required()
@@ -2053,6 +2121,7 @@ def boat_add_amenities(id):
     updated_data = listing_schema.dump(listing_data)
     return jsonify({'message': f'Amenities added successfully!', 'updated_data': updated_data}), 200
 
+
 # Delete Boat Amenities
 @views.route('/client/single-boat-view/delete-amenities/<int:id>', methods=['DELETE'])
 @jwt_required()
@@ -2074,6 +2143,7 @@ def delete_boat_amenities(id):
         return jsonify({'message': 'You are not allowed to update other users listing.'}), 400
 
     return 'Success!', 200
+
 
 # Delete Boat Listing
 @views.route('/client/single-boat-view/delete-listing/<int:id>', methods=['DELETE'])
@@ -2158,6 +2228,7 @@ def all_heavy_vehicle_view():
         "total": data.count()
     }), 200
 
+
 # User Heavy Vehicle View
 @views.route('/client/user-heavy-vehicle-view/<int:id>', methods=['GET'])
 def user_heavy_vehicle_view(id):
@@ -2196,6 +2267,7 @@ def user_heavy_vehicle_view(id):
         "data": result,
         "total": data.count()
     }), 200
+
 
 # Heavy Vehicle Create
 @views.route('/client/heavy-vehicle-create', methods=['POST'])
@@ -2283,6 +2355,7 @@ def heavy_vehicle_create():
     new_added_data = listing_schema.dump(listing_data)
     return jsonify({'message': 'Heavy Vehicle successfully listed!', 'new_data': new_added_data}), 200
 
+
 # Single Heavy Vehicle Update Information
 @views.route('/client/single-heavy-vehicle-view/update-information/<int:id>', methods=['PUT'])
 @jwt_required()
@@ -2330,6 +2403,7 @@ def update_heavy_vehicle(id):
     updated_data = listing_schema.dump(listing_data)
     return jsonify({'message': f'Listing updated successfully!', 'updated_data': updated_data}), 200
 
+
 # Single Heavy Vehicle View
 @views.route('/client/single-heavy-vehicle-view/<int:id>', methods=['GET'])
 def single_heavy_vehicle_view(id):
@@ -2341,6 +2415,7 @@ def single_heavy_vehicle_view(id):
     return jsonify({
         "data": result,
     }), 200
+
 
 # Heavy Vehicle update featured image
 @views.route('/client/single-heavy-vehicle-view/update-featured-image/<int:id>', methods=['PUT'])
@@ -2381,6 +2456,7 @@ def update_heavy_vehicle_featured_img(id):
     updated_data = listing_schema.dump(listing_data)
     return jsonify({'message': f'Listing Featured Image updated successfully!', 'updated_data': updated_data}), 200
 
+
 # Heavy Vehicle Add Images
 @views.route('/client/single-heavy-vehicle-view/add-images/<int:id>', methods=['POST'])
 @jwt_required()
@@ -2414,6 +2490,7 @@ def heavy_vehicle_add_images(id):
 
     updated_data = listing_schema.dump(listing_data)
     return jsonify({'message': f'Images successfully added!', 'updated_data': updated_data}), 200
+
 
 # Delete Heavy Vehicle Images
 @views.route('/client/single-heavy-vehicle-view/delete-images/<int:id>', methods=['DELETE'])
@@ -2759,6 +2836,7 @@ def update_profile_picture(id):
     updated_data = user_schema.dump(data)
 
     return jsonify({'message': f'Profile Picture updated successfully!', 'updated_data': updated_data}), 200
+
 
 @views.route('/delete/user/<int:id>', methods=['DELETE'])
 @jwt_required()

@@ -19,6 +19,11 @@ class Admin(db.Model):
     updated_by = db.Column(db.String(255))
     updated_date = db.Column(db.DateTime(timezone=True))
 
+class Favorites(db.Model):
+    __tablename__ = 'favorites'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete='CASCADE'), nullable=False)
+    listing_id = db.Column(db.Integer, db.ForeignKey("listings.id", ondelete='CASCADE'), nullable=False)
 
 class User(db.Model):
     __tablename__ = 'user'
@@ -35,6 +40,7 @@ class User(db.Model):
     verified = db.Column(db.Integer, default=0)
     verification_code = db.Column(db.String(255))
     listings = db.relationship("Listings", backref="user", lazy='select', cascade="all, delete")
+    favorites = db.relationship("Favorites", backref="user", lazy='select', cascade="all, delete")
     reset_token = db.Column(db.Text)
     reset_token_timestamp = db.Column(db.DateTime(timezone=True))
     refresh_token = db.relationship('RefreshToken', backref='user', lazy='select', cascade='all, delete')
@@ -120,6 +126,7 @@ class Listings(db.Model):
     motorcycle = db.relationship("Motorcycle", uselist=False,backref="listing", lazy='select', cascade="all, delete")
     boats = db.relationship("Boats", uselist=False,backref="listing", lazy='select', cascade="all, delete")
     heavy_vehicles = db.relationship("HeavyVehicles", uselist=False,backref="listing", lazy='select', cascade="all, delete")
+    favorites = db.relationship("Favorites", backref="listing", lazy='select',cascade="all, delete")
     created_by = db.Column(db.String(255))
     created_date = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
     updated_by = db.Column(db.String(255))
