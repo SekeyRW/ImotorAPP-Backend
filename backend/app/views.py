@@ -697,13 +697,17 @@ def all_listing_search():
 @jwt_required()
 @current_user_required
 def add_favorite(id):
-    if g.current_user['id']:
-        data = Favorites(user_id=g.current_user['id'], listing_id=id)
-        db.session.add(data)
-        db.session.commit()
+    faved = Favorites.query.filter_by(user_id=g.current_user['id'], listing_id=id).first()
+    if faved is None:
+        if g.current_user['id']:
+            data = Favorites(user_id=g.current_user['id'], listing_id=id)
+            db.session.add(data)
+            db.session.commit()
+        else:
+            return jsonify({'message': 'Please log in to add favorite'}), 400
+        return jsonify({'message': 'Listing added to favorites successfully'}), 200
     else:
-        return jsonify({'message': 'Please log in to add favorite'}), 400
-    return jsonify({'message': 'Listing added to favorites successfully'}), 200
+        return jsonify({'message': 'Already added to favorites'}), 400
 
 
 @views.route('/client/remove-favorite/<int:id>', methods=['DELETE'])
@@ -740,7 +744,33 @@ def get_favorite_listings(id):
     }), 200
 
 
+@views.route('/client/check-favorite/<int:id>', methods=['GET'])
+@jwt_required()
+@current_user_required
+def check_favorite(id):
+    if g.current_user['id']:
+        favorite = Favorites.query.filter_by(user_id=g.current_user['id'], listing_id=id).first()
+        if favorite:
+            is_favorite = 1
+        else:
+            is_favorite = 0
+    else:
+        return jsonify({'message': 'Please log in to add favorite'}), 400
+    return jsonify({'isFavorite': is_favorite})
+
+
 ##################### FAVORITES FUNCTION ENDPOINT #################
+
+############ VIEW ALL IMAGES IN A LISTING ############
+@views.route('/client/single-listing-view/additional-images-view/<int:id>', methods=['GET'])
+@jwt_required()
+@current_user_required
+def additiona_images(id):
+    data = ListingImage.query.filter_by(listing_id=id)
+
+    result = listing_images_schema.dump(data)
+    return jsonify({"data": result})
+##################END########################
 
 ###################### CAR LISTING ENDPOINT ###########################
 # All Car View
@@ -788,6 +818,67 @@ def all_car_view():
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
     result = listings_schema.dump(data_paginated)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+
+# AUTH All Car View
+@views.route('/client/auth-all-car-view', methods=['GET'])
+@jwt_required()
+@current_user_required
+def auth_all_car_view():
+    user_id = g.current_user['id']
+    user_favorite_ids = [fav.listing_id for fav in Favorites.query.filter_by(user_id=user_id).all()]
+
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+
+    search = request.args.get('search', '', type=str)
+    brand = request.args.get('brand', type=str)
+    startPrice = request.args.get('startPrice', '', type=str)
+    endPrice = request.args.get('endPrice', '', type=str)
+    startModelYear = request.args.get('startModelYear', '', type=str)
+    endModelYear = request.args.get('endModelYear', '', type=str)
+    startMileage = request.args.get('startMileage', '', type=str)
+    endMileage = request.args.get('endMileage', '', type=str)
+
+    data = Listings.query.filter_by(vehicle_type='car')
+
+    if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
+            startModelYear and endModelYear):
+        filter_conditions = []
+
+        if search:
+            search_conditions = Listings.title.ilike(f"%{search}%")
+            filter_conditions.append(search_conditions)
+        if brand:
+            brand = int(brand)
+            brand_conditions = Listings.brand_id == brand
+            filter_conditions.append(brand_conditions)
+        if startPrice and endPrice:
+            price_condition = Listings.price.between(startPrice, endPrice)
+            filter_conditions.append(price_condition)
+        if startMileage and endMileage:
+            mileage_condition = Listings.mileage.between(startMileage, endMileage)
+            filter_conditions.append(mileage_condition)
+        if startModelYear and endModelYear:
+            modelYear_condition = Listings.model_year.between(startModelYear, endModelYear)
+            filter_conditions.append(modelYear_condition)
+
+        data = data.filter(and_(*filter_conditions))
+
+    data = data.order_by(Listings.id.desc())
+
+    data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
+
+    result = []
+    for listing in data_paginated:
+        listing_dict = listing_schema.dump(listing)
+        listing_dict['is_favorite'] = int(listing.id in user_favorite_ids)
+        result.append(listing_dict)
 
     return jsonify({
         "data": result,
@@ -1283,6 +1374,67 @@ def all_motorcycle_view():
     }), 200
 
 
+# AUTH All Motor View
+@views.route('/client/auth-all-motorcylce-view', methods=['GET'])
+@jwt_required()
+@current_user_required
+def auth_all_motorcycle_view():
+    user_id = g.current_user['id']
+    user_favorite_ids = [fav.listing_id for fav in Favorites.query.filter_by(user_id=user_id).all()]
+
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+
+    search = request.args.get('search', '', type=str)
+    brand = request.args.get('brand', type=str)
+    startPrice = request.args.get('startPrice', '', type=str)
+    endPrice = request.args.get('endPrice', '', type=str)
+    startModelYear = request.args.get('startModelYear', '', type=str)
+    endModelYear = request.args.get('endModelYear', '', type=str)
+    startMileage = request.args.get('startMileage', '', type=str)
+    endMileage = request.args.get('endMileage', '', type=str)
+
+    data = Listings.query.filter_by(vehicle_type='motorcycle')
+
+    if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
+            startModelYear and endModelYear):
+        filter_conditions = []
+
+        if search:
+            search_conditions = Listings.title.ilike(f"%{search}%")
+            filter_conditions.append(search_conditions)
+        if brand:
+            brand = int(brand)
+            brand_conditions = Listings.brand_id == brand
+            filter_conditions.append(brand_conditions)
+        if startPrice and endPrice:
+            price_condition = Listings.price.between(startPrice, endPrice)
+            filter_conditions.append(price_condition)
+        if startMileage and endMileage:
+            mileage_condition = Listings.mileage.between(startMileage, endMileage)
+            filter_conditions.append(mileage_condition)
+        if startModelYear and endModelYear:
+            modelYear_condition = Listings.model_year.between(startModelYear, endModelYear)
+            filter_conditions.append(modelYear_condition)
+
+        data = data.filter(and_(*filter_conditions))
+
+    data = data.order_by(Listings.id.desc())
+
+    data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
+
+    result = []
+    for listing in data_paginated:
+        listing_dict = listing_schema.dump(listing)
+        listing_dict['is_favorite'] = int(listing.id in user_favorite_ids)
+        result.append(listing_dict)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+
 # User Motorcycle View
 @views.route('/client/user-motorcycle-view/<int:id>', methods=['GET'])
 def user_motorcycle_view(id):
@@ -1699,7 +1851,6 @@ def delete_motorcycle_listing(id):
 
     return 'Success!', 200
 
-
 ########## END OF MOTORCYCLE LISTING ENDPOINT ###########
 
 ########### BOAT LISTING ENDPOINT ################
@@ -1748,6 +1899,67 @@ def all_boat_view():
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
     result = listings_schema.dump(data_paginated)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+
+# AUTH All Boat View
+@views.route('/client/auth-all-boat-view', methods=['GET'])
+@jwt_required()
+@current_user_required
+def auth_all_boat_view():
+    user_id = g.current_user['id']
+    user_favorite_ids = [fav.listing_id for fav in Favorites.query.filter_by(user_id=user_id).all()]
+
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+
+    search = request.args.get('search', '', type=str)
+    brand = request.args.get('brand', type=str)
+    startPrice = request.args.get('startPrice', '', type=str)
+    endPrice = request.args.get('endPrice', '', type=str)
+    startModelYear = request.args.get('startModelYear', '', type=str)
+    endModelYear = request.args.get('endModelYear', '', type=str)
+    startMileage = request.args.get('startMileage', '', type=str)
+    endMileage = request.args.get('endMileage', '', type=str)
+
+    data = Listings.query.filter_by(vehicle_type='boat')
+
+    if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
+            startModelYear and endModelYear):
+        filter_conditions = []
+
+        if search:
+            search_conditions = Listings.title.ilike(f"%{search}%")
+            filter_conditions.append(search_conditions)
+        if brand:
+            brand = int(brand)
+            brand_conditions = Listings.brand_id == brand
+            filter_conditions.append(brand_conditions)
+        if startPrice and endPrice:
+            price_condition = Listings.price.between(startPrice, endPrice)
+            filter_conditions.append(price_condition)
+        if startMileage and endMileage:
+            mileage_condition = Listings.mileage.between(startMileage, endMileage)
+            filter_conditions.append(mileage_condition)
+        if startModelYear and endModelYear:
+            modelYear_condition = Listings.model_year.between(startModelYear, endModelYear)
+            filter_conditions.append(modelYear_condition)
+
+        data = data.filter(and_(*filter_conditions))
+
+    data = data.order_by(Listings.id.desc())
+
+    data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
+
+    result = []
+    for listing in data_paginated:
+        listing_dict = listing_schema.dump(listing)
+        listing_dict['is_favorite'] = int(listing.id in user_favorite_ids)
+        result.append(listing_dict)
 
     return jsonify({
         "data": result,
@@ -2222,6 +2434,67 @@ def all_heavy_vehicle_view():
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
     result = listings_schema.dump(data_paginated)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+
+# AUTH All HV View
+@views.route('/client/auth-all-heavy-vehicle-view', methods=['GET'])
+@jwt_required()
+@current_user_required
+def auth_all_heavy_view():
+    user_id = g.current_user['id']
+    user_favorite_ids = [fav.listing_id for fav in Favorites.query.filter_by(user_id=user_id).all()]
+
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+
+    search = request.args.get('search', '', type=str)
+    brand = request.args.get('brand', type=str)
+    startPrice = request.args.get('startPrice', '', type=str)
+    endPrice = request.args.get('endPrice', '', type=str)
+    startModelYear = request.args.get('startModelYear', '', type=str)
+    endModelYear = request.args.get('endModelYear', '', type=str)
+    startMileage = request.args.get('startMileage', '', type=str)
+    endMileage = request.args.get('endMileage', '', type=str)
+
+    data = Listings.query.filter_by(vehicle_type='heavy vehicle')
+
+    if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
+            startModelYear and endModelYear):
+        filter_conditions = []
+
+        if search:
+            search_conditions = Listings.title.ilike(f"%{search}%")
+            filter_conditions.append(search_conditions)
+        if brand:
+            brand = int(brand)
+            brand_conditions = Listings.brand_id == brand
+            filter_conditions.append(brand_conditions)
+        if startPrice and endPrice:
+            price_condition = Listings.price.between(startPrice, endPrice)
+            filter_conditions.append(price_condition)
+        if startMileage and endMileage:
+            mileage_condition = Listings.mileage.between(startMileage, endMileage)
+            filter_conditions.append(mileage_condition)
+        if startModelYear and endModelYear:
+            modelYear_condition = Listings.model_year.between(startModelYear, endModelYear)
+            filter_conditions.append(modelYear_condition)
+
+        data = data.filter(and_(*filter_conditions))
+
+    data = data.order_by(Listings.id.desc())
+
+    data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
+
+    result = []
+    for listing in data_paginated:
+        listing_dict = listing_schema.dump(listing)
+        listing_dict['is_favorite'] = int(listing.id in user_favorite_ids)
+        result.append(listing_dict)
 
     return jsonify({
         "data": result,
@@ -2868,6 +3141,23 @@ def delete_user(id):
 
 
 ############## END OF USER PROFILE ENDPOINTS #######################
+
+
+############## ALL BRANDS ENDPOINT ################################
+# Brands View
+@views.route('/client/all-brand-view', methods=['GET'])
+def client_brands_view():
+    data = Brand.query
+
+    result = brands_schema.dump(data)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+
+############################# END OF BRANDS ENDPOINT ####################
 
 # FOR TESTING DATA
 @views.route('/test', methods=['POST'])
