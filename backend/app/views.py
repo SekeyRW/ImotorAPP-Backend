@@ -618,6 +618,32 @@ def heavy_vehicle_listing_view():
     }), 200
 
 
+# Delete Listing
+@views.route('/admin/delete-listing/<int:id>', methods=['DELETE'])
+@jwt_required()
+@current_user_required
+def admin_delete_listing(id):
+    admin = Admin.query.get(g.current_user['id'])
+    if admin:
+        listing_data = Listings.query.filter_by(id=id).first()
+        if listing_data:
+            listing = Listings.query.get(id)
+            if listing_data.featured_image:
+                image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], listing_data.featured_image)
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+            for image in listing_data.listing_image:
+                image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], image.image)
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+            db.session.delete(listing)
+            db.session.commit()
+        else:
+            return jsonify({'message': 'Listing not found.'}), 400
+    else:
+        return jsonify({'message': 'You are not allowed to update other users listing.'}), 400
+    return 'Success!', 200
+
 ############### END OF LISTINGS ##################################
 # USER INFORMATION
 @views.route('/admin/users-view', methods=['GET'])

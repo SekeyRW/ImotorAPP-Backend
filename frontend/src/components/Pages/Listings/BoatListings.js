@@ -2,6 +2,8 @@ import {useEffect, useState} from "react";
 import axios from "axios";
 import Loading from "../../Others/Loading";
 import ReactPaginate from "react-paginate";
+import {toast} from "react-toastify";
+import {Button, Modal} from "react-bootstrap";
 
 function BoatListings() {
     const token = localStorage.getItem("token");
@@ -11,6 +13,10 @@ function BoatListings() {
     const [searchTerm, setSearchTerm] = useState('');
     const [data, setData] = useState([])
     const [isLoading, setLoading] = useState(true)
+
+         const [deleteDataId, setDeleteDataId] = useState(null);
+    const [deleteDataName, setDeleteDataName] = useState(null);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
 
     const pageCount = Math.ceil(total / pageSize);
     const handlePageChange = ({selected}) => {
@@ -34,6 +40,29 @@ function BoatListings() {
                 setLoading(false)
             })
     }, [pageNumber, pageSize, searchTerm, token])
+
+    function confirmDeleteData(id, name) {
+        setDeleteDataId(id);
+        setDeleteDataName(`${name}`);
+        setShowDeleteModal(true);
+    }
+
+    function handleDeleteData(id) {
+        fetch(`${process.env.REACT_APP_API_URL}/admin/delete-listing/${id}`, {
+            method: 'DELETE', headers: {
+                'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`,
+            }
+        })
+            .then(response => {
+                const updatedData = data.filter(item => item.id !== id);
+                setData(updatedData);
+                toast.success('Listing removed successfully.');
+            })
+            .catch(error => {
+                console.error(error);
+                toast.error('An error occurred while deleting data.');
+            });
+    }
 
     if (isLoading) {
         return (
@@ -83,6 +112,7 @@ function BoatListings() {
                                 <th>Model Year</th>
                                 <th>Variant</th>
                                 <th>Mileage</th>
+                                <th>Action</th>
                             </tr>
                             </thead>
                             <tbody className='table-group-divider'>
@@ -109,6 +139,12 @@ function BoatListings() {
                                         <td>{data.model_year}</td>
                                         <td>{data.variant}</td>
                                         <td>{data.mileage}</td>
+                                        <td>
+                                            <button className="btn btn-danger btn-sm"
+                                                    onClick={() => confirmDeleteData(data.id, data.title)}>
+                                                <i
+                                                    className='fas fa-trash-alt'></i></button>
+                                        </td>
 
                                     </tr>
                                 )))}
@@ -134,6 +170,26 @@ function BoatListings() {
                     />
                 </div>
             </div>
+
+            <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)} backdrop='static'>
+                <Modal.Header>
+                    <Modal.Title>Delete Listing</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    <p>Are you sure you want to delete {deleteDataName}?</p>
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>
+                        Cancel
+                    </Button>
+                    <Button variant="danger" onClick={() => {
+                        handleDeleteData(deleteDataId);
+                        setShowDeleteModal(false);
+                    }}>
+                        Delete
+                    </Button>
+                </Modal.Footer>
+            </Modal>
         </>
     )
 }
