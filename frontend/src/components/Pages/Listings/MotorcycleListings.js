@@ -111,6 +111,7 @@ function MotorcycleListings() {
                                 <th>Model Year</th>
                                 <th>Variant</th>
                                 <th>Mileage</th>
+                                <th>User</th>
                                 <th>Action</th>
                             </tr>
                             </thead>
@@ -138,6 +139,7 @@ function MotorcycleListings() {
                                         <td>{data.model_year}</td>
                                         <td>{data.variant}</td>
                                         <td>{data.mileage}</td>
+                                        <td>{data.user.first_name} {data.user.last_name}</td>
                                         <td>
                                             <button className="btn btn-danger btn-sm"
                                                     onClick={() => confirmDeleteData(data.id, data.title)}>
