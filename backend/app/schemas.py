@@ -1,7 +1,7 @@
 from marshmallow import fields
 from . import ma
 from .models import User, Admin, Brand, Listings, Cars, ListingAmenities, SafetyFeatures, ListingImage, Location, \
-    Community, Motorcycle, Boats, HeavyVehicles, Favorites
+    Community, Motorcycle, Boats, HeavyVehicles, Favorites, Make, Trim
 
 
 class UserSchema(ma.SQLAlchemyAutoSchema):
@@ -21,6 +21,16 @@ class AdminSchema(ma.SQLAlchemyAutoSchema):
 class BrandSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Brand
+        load_instance = True
+
+class MakeSchema(ma.SQLAlchemyAutoSchema):
+    class Meta:
+        model = Make
+        load_instance = True
+
+class TrimSchema(ma.SQLAlchemyAutoSchema):
+    class Meta:
+        model = Trim
         load_instance = True
 
 class FavoritesSchema(ma.SQLAlchemyAutoSchema):

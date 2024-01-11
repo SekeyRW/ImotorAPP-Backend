@@ -67,11 +67,32 @@ class Brand(db.Model):
     type = db.Column(db.String(255))
     image = db.Column(db.Text)
     listings = db.relationship("Listings", backref="brand", lazy='select', cascade="all, delete")
+    make = db.relationship("Make", backref="brand", lazy='select', cascade="all, delete")
     created_by = db.Column(db.String(255))
     created_date = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
     updated_by = db.Column(db.String(255))
     updated_date = db.Column(db.DateTime(timezone=True))
 
+class Make(db.Model):
+    __tablename__ = 'make'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255))
+    brand_id = db.Column(db.Integer, db.ForeignKey("brand.id", ondelete='CASCADE'), nullable=False)
+    trim = db.relationship("Trim", backref="make", lazy='select', cascade="all, delete")
+    created_by = db.Column(db.String(255))
+    created_date = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
+    updated_by = db.Column(db.String(255))
+    updated_date = db.Column(db.DateTime(timezone=True))
+
+class Trim(db.Model):
+    __tablename__ = 'trim'
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255))
+    make_id = db.Column(db.Integer, db.ForeignKey("make.id", ondelete='CASCADE'), nullable=False)
+    created_by = db.Column(db.String(255))
+    created_date = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
+    updated_by = db.Column(db.String(255))
+    updated_date = db.Column(db.DateTime(timezone=True))
 
 class Location(db.Model):
     __tablename__ = 'location'

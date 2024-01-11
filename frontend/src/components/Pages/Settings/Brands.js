@@ -4,6 +4,7 @@ import axios from "axios";
 import Loading from "../../Others/Loading";
 import {Button, Modal} from "react-bootstrap";
 import {toast} from "react-toastify";
+import {useNavigate} from "react-router-dom";
 
 function Brands() {
     const token = localStorage.getItem("token");
@@ -11,6 +12,8 @@ function Brands() {
     const [pageSize, setPageSize] = useState(10);
     const [total, setTotal] = useState(0);
     const [searchTerm, setSearchTerm] = useState('');
+    const [type, setType] = useState('all');
+
     const [isLoading, setLoading] = useState(true)
     const [data, setData] = useState([])
     const [formData, setFormData] = useState({});
@@ -27,13 +30,15 @@ function Brands() {
     const [deleteDataName, setDeleteDataName] = useState(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
 
+    const navigate = useNavigate();
+
     const pageCount = Math.ceil(total / pageSize);
     const handlePageChange = ({selected}) => {
         setPageNumber(selected);
     };
 
     useEffect(() => {
-        axios.get(`${process.env.REACT_APP_API_URL}/admin/brand-view?page=${pageNumber + 1}&page_size=${pageSize}&search=${searchTerm}`, {
+        axios.get(`${process.env.REACT_APP_API_URL}/admin/brand-view?page=${pageNumber + 1}&page_size=${pageSize}&search=${searchTerm}&type=${type}`, {
             headers: {
                 'Authorization': `Bearer ${token}`
             }
@@ -48,7 +53,7 @@ function Brands() {
             .finally(() => {
                 setLoading(false)
             })
-    }, [pageNumber, pageSize, searchTerm, token])
+    }, [pageNumber, pageSize, searchTerm, token, type])
 
     function confirmAddData(event) {
         event.preventDefault()
@@ -195,6 +200,12 @@ function Brands() {
             });
     }
 
+    function handleMakeModel(id, name, type) {
+        const brand_name = encodeURIComponent(`${name}`);
+        const brand_type = encodeURIComponent(`${type}`);
+        navigate(`/settings/brands/make-and-model/${id}/${brand_name}/${brand_type}`);
+    }
+
 
     if (isLoading) {
         return (
@@ -215,11 +226,22 @@ function Brands() {
                 </div>
                 <div className="card-body rounded-3">
                     <div className="row g-3">
-                        <div className='col-md-11'>
+                        <div className='col-md-9'>
                             <input type="text" className="form-control" placeholder="Search Brand Name!"
                                    aria-label="Search"
                                    aria-describedby="basic-addon2" value={searchTerm}
                                    onChange={e => setSearchTerm(e.target.value)}/>
+                        </div>
+                        <div className='col-md-2'>
+                            <select className="form-control" value={type} onChange={e => {
+                                setType(e.target.value);
+                            }}>
+                                <option value="all">All</option>
+                                <option value="car">Car</option>
+                                <option value="boat">Boat</option>
+                                <option value="motorcycle">Motorcycle</option>
+                                <option value="heavy vehicle">Heavy Vehicle</option>
+                            </select>
                         </div>
                         <div className='col-md'>
                             <select className="form-control" value={pageSize} onChange={e => {
@@ -243,6 +265,7 @@ function Brands() {
                                 <th>Image</th>
                                 <th>Name</th>
                                 <th>Type</th>
+                                <th>Make & Model</th>
                                 <th>Action</th>
                             </tr>
                             </thead>
@@ -264,6 +287,12 @@ function Brands() {
                                         </td>
                                         <td>{data.name}</td>
                                         <td>{data.type}</td>
+                                        <td>
+                                            <button className="btn btn-primary btn-sm mx-1"
+                                                    onClick={() => handleMakeModel(data.id, data.name, data.type)}>
+                                                Make & Model
+                                            </button>
+                                        </td>
                                         <td>
                                             <button className="btn btn-warning btn-sm mx-1" onClick={() => {
                                                 setUpdateId(data.id)

@@ -13,15 +13,21 @@ from werkzeug.utils import secure_filename
 from . import db, bcrypt, allowed_file
 from .decorators import current_user_required
 from .models import Admin, Brand, Location, Community, Cars, Listings, ListingImage, SafetyFeatures, ListingAmenities, \
-    User, Motorcycle, Boats, HeavyVehicles, Favorites
+    User, Motorcycle, Boats, HeavyVehicles, Favorites, Make, Trim
 from .schemas import BrandSchema, CommunitySchema, ListingsSchema, CarsSchema, UserSchema, ListingImageSchema, \
-    FavoritesSchema
+    FavoritesSchema, TrimSchema, MakeSchema
 
 views = Blueprint('views', __name__)
 
 # SCHEMAS
 brand_schema = BrandSchema()
 brands_schema = BrandSchema(many=True)
+
+make_schema = MakeSchema()
+makes_schema = MakeSchema(many=True)
+
+trim_schema = TrimSchema()
+trims_schema = TrimSchema(many=True)
 
 user_schema = UserSchema()
 users_schema = UserSchema(many=True)
@@ -107,20 +113,21 @@ def brands_view():
     page_size = request.args.get('page_size', 10, type=int)
 
     search = request.args.get('search', '', type=str)
+    type = request.args.get('type', '', type=str)
 
     data = Brand.query
 
-    if search:
-        search_words = search.split(',')
+    if search or type:
+        filter_conditions = []
 
-        def search_filter(word):
-            word = word.strip()
-            return or_(
-                Brand.name.ilike(f"%{word}%"),
-            )
+        if search:
+            search_conditions = Brand.name.ilike(f"%{search}%")
+            filter_conditions.append(search_conditions)
+        if type and type.lower() != 'all':
+            type_conditions = Brand.type.ilike(f"%{type}%")
+            filter_conditions.append(type_conditions)
 
-        filter_conditions = [search_filter(word) for word in search_words]
-        data = data.filter(*filter_conditions)
+        data = data.filter(and_(*filter_conditions))
 
     data = data.order_by(Brand.id.desc())
 
@@ -221,6 +228,185 @@ def brand_delete(id):
     db.session.commit()
     return 'Success!', 200
 
+# Make & Model View
+@views.route('/admin/make-and-model-view/<int:id>', methods=['GET'])
+@jwt_required()
+@current_user_required
+def make_and_model_view(id):
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+
+    search = request.args.get('search', '', type=str)
+
+    data = Make.query.filter_by(brand_id=id)
+
+    if search:
+        search_words = search.split(',')
+
+        def search_filter(word):
+            word = word.strip()
+            return or_(
+                Make.name.ilike(f"%{word}%"),
+            )
+
+        filter_conditions = [search_filter(word) for word in search_words]
+        data = data.filter(*filter_conditions)
+
+    data = data.order_by(Make.id.desc())
+
+    data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
+
+    result = makes_schema.dump(data_paginated)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+# Make & Model Create
+@views.route('/admin/make-and-model-create/<int:id>', methods=['POST'])
+@jwt_required()
+@current_user_required
+def make_and_model_create(id):
+    new_data = request.get_json()
+
+    existing_data = Make.query.filter_by(name=new_data['name'].lower(), brand_id=id).first()
+
+    if existing_data is not None:
+        return jsonify({'message': 'Make & Model Already Exists!'}), 400
+
+    new_data2 = Make(
+        name=new_data['name'],
+        brand_id=id,
+        created_by=g.current_user['email']
+    )
+
+    db.session.add(new_data2)
+    db.session.commit()
+
+    new_added_data = make_schema.dump(new_data2)
+    return jsonify({'message': 'Make & Model successfully added!', 'new_data': new_added_data}), 200
+
+# Make & Model Update
+@views.route('/admin/make-and-model-update/<int:id>', methods=['PUT'])
+@jwt_required()
+@current_user_required
+def make_and_model_update(id):
+    new_data = request.get_json()
+    data = Make.query.get(id)
+    if data:
+        data.name = new_data['name']
+        data.updated_by = g.current_user['email']
+        data.updated_date = datetime.now()
+        db.session.commit()
+    else:
+        return jsonify({'message': 'Make & Model not found!'}), 400
+
+    updated_data = make_schema.dump(data)
+    return jsonify({'message': 'Make & Model updated successfully!', 'updated_data': updated_data}), 200
+
+# Make & Model Delete
+@views.route('/admin/make-and-model-delete/<int:id>', methods=['DELETE'])
+@jwt_required()
+@current_user_required
+def make_and_model_delete(id):
+    data = Make.query.get(id)
+    if data is None:
+        return jsonify({'message': 'Make & Model not found.'}), 400
+
+    db.session.delete(data)
+    db.session.commit()
+    return 'Success!', 200
+
+# Trim View
+@views.route('/admin/trim-view/<int:id>', methods=['GET'])
+@jwt_required()
+@current_user_required
+def trim_view(id):
+    page = request.args.get('page', 1, type=int)
+    page_size = request.args.get('page_size', 10, type=int)
+
+    search = request.args.get('search', '', type=str)
+
+    data = Trim.query.filter_by(make_id=id)
+
+    if search:
+        search_words = search.split(',')
+
+        def search_filter(word):
+            word = word.strip()
+            return or_(
+                Trim.name.ilike(f"%{word}%"),
+            )
+
+        filter_conditions = [search_filter(word) for word in search_words]
+        data = data.filter(*filter_conditions)
+
+    data = data.order_by(Trim.id.desc())
+
+    data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
+
+    result = trims_schema.dump(data_paginated)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+# Trim Create
+@views.route('/admin/trim-create/<int:id>', methods=['POST'])
+@jwt_required()
+@current_user_required
+def trim_create(id):
+    new_data = request.get_json()
+
+    existing_data = Trim.query.filter_by(name=new_data['name'].lower(), make_id=id).first()
+
+    if existing_data is not None:
+        return jsonify({'message': 'Trim Already Exists!'}), 400
+
+    new_data2 = Trim(
+        name=new_data['name'],
+        make_id=id,
+        created_by=g.current_user['email']
+    )
+
+    db.session.add(new_data2)
+    db.session.commit()
+
+    new_added_data = trim_schema.dump(new_data2)
+    return jsonify({'message': 'Trim successfully added!', 'new_data': new_added_data}), 200
+
+# Trim Update
+@views.route('/admin/trim-update/<int:id>', methods=['PUT'])
+@jwt_required()
+@current_user_required
+def trim_update(id):
+    new_data = request.get_json()
+    data = Trim.query.get(id)
+    if data:
+        data.name = new_data['name']
+        data.updated_by = g.current_user['email']
+        data.updated_date = datetime.now()
+        db.session.commit()
+    else:
+        return jsonify({'message': 'Trim not found!'}), 400
+
+    updated_data = trim_schema.dump(data)
+    return jsonify({'message': 'Trim updated successfully!', 'updated_data': updated_data}), 200
+
+# Trim Delete
+@views.route('/admin/trim-delete/<int:id>', methods=['DELETE'])
+@jwt_required()
+@current_user_required
+def trim_delete(id):
+    data = Trim.query.get(id)
+    if data is None:
+        return jsonify({'message': 'Trim not found.'}), 400
+
+    db.session.delete(data)
+    db.session.commit()
+    return 'Success!', 200
 
 # Locations View
 @views.route('/admin/location-view', methods=['GET'])
@@ -454,7 +640,7 @@ def community_update(id):
     return jsonify({'message': 'Community updated successfully!', 'updated_data': updated_data}), 200
 
 
-# Location Delete
+# Community Delete
 @views.route('/admin/community-delete/<int:id>', methods=['DELETE'])
 @jwt_required()
 @current_user_required
@@ -3006,6 +3192,31 @@ def client_heavy_vehicle_brand_view():
         "total": data.count()
     }), 200
 
+# Get Make Based on Brand
+@views.route('/client/make-view', methods=['GET'])
+def client_make_view():
+    brand_id = request.args.get('brand_id', type=int)
+    data = Make.query.filter_by(brand_id=brand_id)
+
+    result = makes_schema.dump(data)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
+
+# Get Trim Based on Make
+@views.route('/client/trim-view', methods=['GET'])
+def client_trim_view():
+    make_id = request.args.get('make_id', type=int)
+    data = Trim.query.filter_by(make_id=make_id)
+
+    result = trims_schema.dump(data)
+
+    return jsonify({
+        "data": result,
+        "total": data.count()
+    }), 200
 
 ########### END OF BRANDS  ENDPOINT#########################
 
@@ -3035,6 +3246,8 @@ def client_community_view():
         "data": result,
         "total": data.count()
     }), 200
+
+
 
 
 ############# END OF LOCATION AND COMMUNITY ENDPOINTS####################

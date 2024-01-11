@@ -12,6 +12,8 @@ import CarListings from "./components/Pages/Listings/CarListings";
 import MotorcycleListings from "./components/Pages/Listings/MotorcycleListings";
 import BoatListings from "./components/Pages/Listings/BoatListings";
 import HeavyVehicleListings from "./components/Pages/Listings/HeavyVehicleListings";
+import MakeModel from "./components/Pages/Settings/MakeModel";
+import Trim from "./components/Pages/Settings/Trim";
 
 function App() {
     return (
@@ -37,6 +39,8 @@ function App() {
                 <Route path='/listings/boats' element={<Layout element={<BoatListings/>}/>}/>
                 <Route path='/listings/heavy-vehicles' element={<Layout element={<HeavyVehicleListings/>}/>}/>
                 <Route path='/settings/brands' element={<Layout element={<Brands/>}/>}/>
+                <Route path='/settings/brands/make-and-model/:id/:brand_name/:brand_type' element={<Layout element={<MakeModel/>}/>}/>
+                <Route path='/settings/make-and-model/trim/:id/:make_name' element={<Layout element={<Trim/>}/>}/>
                 <Route path='/settings/locations' element={<Layout element={<Locations/>}/>}/>
                 <Route path='/settings/locations/communities/:id/:location_name'
                        element={<Layout element={<Community/>}/>}/>
