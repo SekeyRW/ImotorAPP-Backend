@@ -63,7 +63,7 @@ function MakeModel() {
         const formData = new FormData(event.target);
 
         const data = {
-            name: formData.get("name"),
+            name: brand_name + " " + formData.get("name"),
         };
         setFormData(data);
         setAddConfirmModal(true);
