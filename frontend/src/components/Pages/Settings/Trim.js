@@ -30,6 +30,8 @@ function Trim() {
     const [deleteDataName, setDeleteDataName] = useState(null);
     const [showDeleteModal, setShowDeleteModal] = useState(false);
 
+    const [checkbox, setCheckbox] = useState(0);
+
     const pageCount = Math.ceil(total / pageSize);
     const handlePageChange = ({selected}) => {
         setPageNumber(selected);
@@ -61,6 +63,7 @@ function Trim() {
 
         const data = {
             name: formData.get("name"),
+            checkbox: checkbox
         };
         setFormData(data);
         setAddConfirmModal(true);
@@ -78,16 +81,28 @@ function Trim() {
                     toast.error(response.data.message)
                 } else {
                     const newData = response.data.new_data;
-                    setData(prevData => [newData, ...prevData]);
+                    if (Array.isArray(newData)) {
+                        // Handle the case when multiple trims are added
+                        setData(prevData => [...newData, ...prevData]);
+                    } else {
+                        // Handle the case when a single trim is added
+                        setData(prevData => [newData, ...prevData]);
+                    }
                     toast.success(response.data.message)
                 }
             })
             .catch(error => {
-                console.log(error)
+                if (error.response && error.response.status === 400) {
+                    toast.error(error.response.data.message);
+                } else {
+                    console.log(error);
+                    toast.error('Something went wrong. Please try again.');
+                }
             })
             .finally(() => {
                 setModifying(false)
                 setAddModal(false)
+                setCheckbox(0)
             })
     }
 
@@ -160,14 +175,18 @@ function Trim() {
             });
     }
 
-     if (isLoading) {
+     const handleCheckboxChange = (e) => {
+        setCheckbox(e.target.checked ? 1 : 0);
+    };
+
+    if (isLoading) {
         return (
             <Loading/>
         );
     }
 
     return (
-         <>
+        <>
             <h3 className="text-white mb-3 mt-3 mx-4 bg-gradient-primary pt-4 pb-4 px-4 rounded-2">Trim
                 of {make_name}</h3>
             <div className="card shadow border-primary mb-3 mx-4">
@@ -273,6 +292,18 @@ function Trim() {
                         <input className="form-control" type="text" name="name" id="name"
                                placeholder="Enter Trim Name"
                                required/>
+                        <div className="input-group mt-3">
+                            <div className="input-group-text">
+                                <input className="form-check-input mt-0" type="checkbox"
+                                       value=""
+                                       onChange={handleCheckboxChange}
+                                       checked={checkbox === 1}
+                                       aria-label="Checkbox for following text input"
+                                />
+                            </div>
+                            <input type="text" className="form-control" aria-label="Text input with checkbox"
+                                   value='Multiple Input? (Separated with comma and space *, *)' readOnly/>
+                        </div>
                         <div className="align-content-end">
                             <button className="btn btn-primary float-end mt-3" disabled={isModifying}
                             >{isModifying ? <i className="fa fa-spinner fa-spin"></i> : "Add"}
@@ -288,6 +319,7 @@ function Trim() {
                 </Modal.Header>
                 <Modal.Body>
                     <p><strong>Trim Name:</strong> {formData.name}</p>
+                    <p><strong>Multiple Input:</strong> {formData.checkbox ? 'True' : 'False'}</p>
                 </Modal.Body>
                 <Modal.Footer>
                     <Button variant="secondary" onClick={() => {

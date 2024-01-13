@@ -270,22 +270,39 @@ def make_and_model_view(id):
 def make_and_model_create(id):
     new_data = request.get_json()
 
-    existing_data = Make.query.filter_by(name=new_data['name'].lower(), brand_id=id).first()
+    if new_data['checkbox'] == 0:
+        brand = Brand.query.get(id)
+        existing_data = Make.query.filter_by(name=brand.name + " " + new_data['name'].lower(), brand_id=id).first()
 
-    if existing_data is not None:
-        return jsonify({'message': 'Make & Model Already Exists!'}), 400
+        if existing_data is not None:
+            return jsonify({'message': 'Make & Model Already Exists!'}), 400
 
-    new_data2 = Make(
-        name=new_data['name'],
-        brand_id=id,
-        created_by=g.current_user['email']
-    )
+        new_data2 = Make(
+            name=brand.name + " " + new_data['name'],
+            brand_id=id,
+            created_by=g.current_user['email']
+        )
 
-    db.session.add(new_data2)
-    db.session.commit()
+        db.session.add(new_data2)
+        db.session.commit()
 
-    new_added_data = make_schema.dump(new_data2)
-    return jsonify({'message': 'Make & Model successfully added!', 'new_data': new_added_data}), 200
+        new_added_data = make_schema.dump(new_data2)
+        return jsonify({'message': 'Make & Model successfully added!', 'new_data': new_added_data}), 200
+    else:
+        brand = Brand.query.get(id)
+        models = new_data['name'].split(', ')
+        added_model_data = []
+        for model in models:
+            existing_data = Make.query.filter_by(name=brand.name + " " + model.lower(), brand_id=id).first()
+            if existing_data:
+                pass
+            else:
+                model_data = Make(name=brand.name + " " + model, brand_id=id, created_by=g.current_user['email'])
+                db.session.add(model_data)
+                db.session.commit()
+                added_model_data.append(make_schema.dump(model_data))
+
+        return jsonify({'message': 'Make & Model successfully added!', 'new_data': added_model_data}), 200
 
 # Make & Model Update
 @views.route('/admin/make-and-model-update/<int:id>', methods=['PUT'])
@@ -359,23 +376,39 @@ def trim_view(id):
 @current_user_required
 def trim_create(id):
     new_data = request.get_json()
+    if new_data['checkbox'] == 0:
+        existing_data = Trim.query.filter_by(name=new_data['name'].lower(), make_id=id).first()
 
-    existing_data = Trim.query.filter_by(name=new_data['name'].lower(), make_id=id).first()
+        if existing_data is not None:
+            return jsonify({'message': 'Trim Already Exists!'}), 400
 
-    if existing_data is not None:
-        return jsonify({'message': 'Trim Already Exists!'}), 400
+        new_data2 = Trim(
+            name=new_data['name'],
+            make_id=id,
+            created_by=g.current_user['email']
+        )
 
-    new_data2 = Trim(
-        name=new_data['name'],
-        make_id=id,
-        created_by=g.current_user['email']
-    )
+        db.session.add(new_data2)
+        db.session.commit()
 
-    db.session.add(new_data2)
-    db.session.commit()
+        new_added_data = trim_schema.dump(new_data2)
+        return jsonify({'message': 'Trim successfully added!', 'new_data': new_added_data}), 200
+    else:
+        trims = new_data['name'].split(', ')
+        added_trim_data = []
+        for trim in trims:
+            existing_data = Trim.query.filter_by(name=trim.lower(), make_id=id).first()
+            if existing_data:
+                pass
+            else:
+                trim_data = Trim(name=trim, make_id=id, created_by=g.current_user['email'])
+                db.session.add(trim_data)
+                db.session.commit()
+                added_trim_data.append(trim_schema.dump(trim_data))
 
-    new_added_data = trim_schema.dump(new_data2)
-    return jsonify({'message': 'Trim successfully added!', 'new_data': new_added_data}), 200
+        return jsonify({'message': 'Trims successfully added!', 'new_data': added_trim_data}), 200
+
+
 
 # Trim Update
 @views.route('/admin/trim-update/<int:id>', methods=['PUT'])
