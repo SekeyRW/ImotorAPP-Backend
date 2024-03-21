@@ -7,6 +7,13 @@ USER_VERIFIED_MAPPING = {
     0: "Unverified",
 }
 
+
+STATUS_VERIFIED_MAPPING = {
+    2: "NOT PUBLISHED",
+    1: "PUBLISHED",
+    0: "IN REVIEW",
+}
+
 class Admin(db.Model):
     __tablename__ = 'admin'
     id = db.Column(db.Integer, primary_key=True)
@@ -39,6 +46,14 @@ class User(db.Model):
     status = db.Column(db.Integer, default=1)
     verified = db.Column(db.Integer, default=0)
     verification_code = db.Column(db.String(255))
+    standard_listing = db.Column(db.Integer, default=3)
+    featured_listing = db.Column(db.Integer, default=0)
+    premium_listing = db.Column(db.Integer, default=0)
+    is_subscribe_to_package = db.Column(db.Integer, default=0)
+    premium_package_desc = db.Column(db.Text)
+    standard_listing_desc = db.Column(db.Text)
+    featured_listing_desc = db.Column(db.Text)
+    premium_listing_desc = db.Column(db.Text)
     listings = db.relationship("Listings", backref="user", lazy='select', cascade="all, delete")
     favorites = db.relationship("Favorites", backref="user", lazy='select', cascade="all, delete")
     reset_token = db.Column(db.Text)
@@ -52,6 +67,18 @@ class User(db.Model):
     @property
     def verified_name(self):
         return USER_VERIFIED_MAPPING.get(self.verified, "Unverified")
+
+    @property
+    def count_standard_listings(self):
+        return Listings.query.filter_by(user_id=self.id, featured_as='standard').count()
+
+    @property
+    def count_featured_listings(self):
+        return Listings.query.filter_by(user_id=self.id, featured_as='featured').count()
+
+    @property
+    def count_premium_listings(self):
+        return Listings.query.filter_by(user_id=self.id, featured_as='premium').count()
 
 class RefreshToken(db.Model):
     __tablename__ = 'refresh_tokens'
@@ -136,6 +163,7 @@ class Listings(db.Model):
     featured_as = db.Column(db.String(255))
     g_map_location = db.Column(db.Text)
     featured_image = db.Column(db.Text)
+    publish_status = db.Column(db.Integer, default=0)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete='CASCADE'), nullable=False)
     brand_id = db.Column(db.Integer, db.ForeignKey("brand.id", ondelete='CASCADE'), nullable=False)
     location_id = db.Column(db.Integer, db.ForeignKey("location.id", ondelete='CASCADE'), nullable=False)
@@ -152,6 +180,10 @@ class Listings(db.Model):
     created_date = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
     updated_by = db.Column(db.String(255))
     updated_date = db.Column(db.DateTime(timezone=True))
+
+    @property
+    def publish_status_name(self):
+        return STATUS_VERIFIED_MAPPING.get(self.publish_status, "UNPUBLISHED")
 
 
 class Cars(db.Model):
@@ -263,3 +295,9 @@ class ListingImage(db.Model):
     created_date = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
     updated_by = db.Column(db.String(255))
     updated_date = db.Column(db.DateTime(timezone=True))
+
+class OrderHistory(db.Model):
+    __tablename__ = 'order_history'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete='CASCADE'), nullable=False)
+    description = db.Column(db.Text)

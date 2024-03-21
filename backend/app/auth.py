@@ -8,11 +8,26 @@ from flask import Blueprint, request, jsonify, current_app, redirect, json
 from flask_jwt_extended import create_access_token, create_refresh_token
 from flask_mail import Message
 
-from . import db, bcrypt, mail
+from . import db, bcrypt, mail, stripe
 from .models import User, Admin, RefreshToken
 
 auth = Blueprint('auth', __name__)
 
+#Create Stripe Customer
+def create_stripe_customer(user_id):
+    user = User.query.get(user_id)
+    try:
+        # Create a customer in Stripe with your own unique identifier
+        stripe.Customer.create(
+            id=f'imotorV2_{user.id}',  # Use the user's ID from your database
+            name=f'{user.first_name} {user.last_name}'
+            # Add other optional parameters as needed
+        )
+        return None
+    except stripe.error.StripeError as e:
+        # Handle any errors
+        print(f"Error creating Stripe customer: {e}")
+        return None
 
 # ADMIN LOGIN
 @auth.route('/admin/login', methods=['POST'])
@@ -53,6 +68,7 @@ def google_auth_callback():
         )
         db.session.add(new_user)
         db.session.commit()
+        create_stripe_customer(new_user.id)
         user = new_user
 
         access_token = create_access_token(identity={
@@ -67,6 +83,7 @@ def google_auth_callback():
         new_refresh_token = RefreshToken(token=refresh_token, user_id=user.id, expires_at=refresh_token_exp)
         db.session.add(new_refresh_token)
         db.session.commit()
+
         return jsonify(
             {"access_token": access_token, 'refresh_token': refresh_token, 'message': 'Logged in successfully'}), 200
     else:
@@ -107,6 +124,7 @@ def apple_auth_native_callback():
             )
             db.session.add(new_user)
             db.session.commit()
+            create_stripe_customer(new_user.id)
             user = new_user
 
         access_token = create_access_token(identity={
@@ -121,6 +139,7 @@ def apple_auth_native_callback():
         new_refresh_token = RefreshToken(token=refresh_token, user_id=user.id, expires_at=refresh_token_exp)
         db.session.add(new_refresh_token)
         db.session.commit()
+
         return jsonify(
             {"access_token": access_token, 'refresh_token': refresh_token, 'message': 'Logged in successfully'}), 200
     else:
@@ -167,6 +186,7 @@ def apple_auth_callback():
             )
             db.session.add(new_user)
             db.session.commit()
+            create_stripe_customer(new_user.id)
             user = new_user
 
         access_token = create_access_token(identity={
@@ -236,6 +256,7 @@ def client_signup():
         )
         db.session.add(new_user)
         db.session.commit()
+        create_stripe_customer(new_user.id)
         user = new_user
 
         access_token = create_access_token(identity={
@@ -372,7 +393,13 @@ def refresh_token():
             "first_name": user.first_name,
             "last_name": user.last_name,
         })
-        return {'access_token': new_access_token}, 200
+        refresh_token_exp = datetime.utcnow() + timedelta(days=30)
+        refresh_token_duration = refresh_token_exp - datetime.utcnow()
+        add_refresh_token = create_refresh_token(identity={"user_id": user.id}, expires_delta=refresh_token_duration)
+        new_refresh_token = RefreshToken(token=add_refresh_token, user_id=user.id, expires_at=refresh_token_exp)
+        db.session.add(new_refresh_token)
+        db.session.commit()
+        return {'access_token': new_access_token, 'refresh_token': add_refresh_token}, 200
     else:
         return {'message': 'Invalid refresh token'}, 401
 

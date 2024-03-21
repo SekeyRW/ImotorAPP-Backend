@@ -14,6 +14,9 @@ import BoatListings from "./components/Pages/Listings/BoatListings";
 import HeavyVehicleListings from "./components/Pages/Listings/HeavyVehicleListings";
 import MakeModel from "./components/Pages/Settings/MakeModel";
 import Trim from "./components/Pages/Settings/Trim";
+import Checkout from "./components/Pages/Test/Checkout";
+import Return from "./components/Pages/Test/Return";
+import Subscriptions from "./components/Pages/Test/Subscriptions";
 
 function App() {
     return (
@@ -44,6 +47,9 @@ function App() {
                 <Route path='/settings/locations' element={<Layout element={<Locations/>}/>}/>
                 <Route path='/settings/locations/communities/:id/:location_name'
                        element={<Layout element={<Community/>}/>}/>
+                 <Route path="/checkout" element={<Checkout/>} />
+                <Route path="/return" element={<Return/>} />
+                <Route path="/subscriptions" element={<Subscriptions/>} />
             </Routes>
         </>
     );

@@ -10,7 +10,18 @@ class UserSchema(ma.SQLAlchemyAutoSchema):
         load_instance = True
 
     verified_name = fields.String(attribute='verified_name')
+    standard_listings_count = fields.Method("get_standard_listings_count")
+    featured_listings_count = fields.Method("get_featured_listings_count")
+    premium_listings_count = fields.Method("get_premium_listings_count")
 
+    def get_standard_listings_count(self, obj):
+        return obj.count_standard_listings
+
+    def get_featured_listings_count(self, obj):
+        return obj.count_featured_listings
+
+    def get_premium_listings_count(self, obj):
+        return obj.count_premium_listings
 
 class AdminSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
@@ -66,6 +77,7 @@ class ListingsSchema(ma.SQLAlchemyAutoSchema):
     brand = fields.Nested('BrandSchema')
     location = fields.Nested('LocationSchema')
     community = fields.Nested('CommunitySchema')
+    publish_status_name = fields.String(attribute='publish_status_name')
 
 class CarsSchema(ma.SQLAlchemyAutoSchema):
     class Meta:

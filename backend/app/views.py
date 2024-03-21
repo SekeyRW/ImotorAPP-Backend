@@ -1,16 +1,19 @@
 import io
 import os
+import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
+import requests
 from PIL import Image
 from flask import Blueprint, jsonify, request, send_from_directory, current_app, g
 from flask_jwt_extended import jwt_required
+from flask_mail import Message
 from slugify import slugify
 from sqlalchemy import or_, and_
 from werkzeug.utils import secure_filename
 
-from . import db, bcrypt, allowed_file
+from . import db, bcrypt, allowed_file, stripe, mail
 from .decorators import current_user_required
 from .models import Admin, Brand, Location, Community, Cars, Listings, ListingImage, SafetyFeatures, ListingAmenities, \
     User, Motorcycle, Boats, HeavyVehicles, Favorites, Make, Trim
@@ -228,6 +231,7 @@ def brand_delete(id):
     db.session.commit()
     return 'Success!', 200
 
+
 # Make & Model View
 @views.route('/admin/make-and-model-view/<int:id>', methods=['GET'])
 @jwt_required()
@@ -262,6 +266,7 @@ def make_and_model_view(id):
         "data": result,
         "total": data.count()
     }), 200
+
 
 # Make & Model Create
 @views.route('/admin/make-and-model-create/<int:id>', methods=['POST'])
@@ -304,6 +309,7 @@ def make_and_model_create(id):
 
         return jsonify({'message': 'Make & Model successfully added!', 'new_data': added_model_data}), 200
 
+
 # Make & Model Update
 @views.route('/admin/make-and-model-update/<int:id>', methods=['PUT'])
 @jwt_required()
@@ -322,6 +328,7 @@ def make_and_model_update(id):
     updated_data = make_schema.dump(data)
     return jsonify({'message': 'Make & Model updated successfully!', 'updated_data': updated_data}), 200
 
+
 # Make & Model Delete
 @views.route('/admin/make-and-model-delete/<int:id>', methods=['DELETE'])
 @jwt_required()
@@ -334,6 +341,7 @@ def make_and_model_delete(id):
     db.session.delete(data)
     db.session.commit()
     return 'Success!', 200
+
 
 # Trim View
 @views.route('/admin/trim-view/<int:id>', methods=['GET'])
@@ -369,6 +377,7 @@ def trim_view(id):
         "data": result,
         "total": data.count()
     }), 200
+
 
 # Trim Create
 @views.route('/admin/trim-create/<int:id>', methods=['POST'])
@@ -409,7 +418,6 @@ def trim_create(id):
         return jsonify({'message': 'Trims successfully added!', 'new_data': added_trim_data}), 200
 
 
-
 # Trim Update
 @views.route('/admin/trim-update/<int:id>', methods=['PUT'])
 @jwt_required()
@@ -428,6 +436,7 @@ def trim_update(id):
     updated_data = trim_schema.dump(data)
     return jsonify({'message': 'Trim updated successfully!', 'updated_data': updated_data}), 200
 
+
 # Trim Delete
 @views.route('/admin/trim-delete/<int:id>', methods=['DELETE'])
 @jwt_required()
@@ -440,6 +449,7 @@ def trim_delete(id):
     db.session.delete(data)
     db.session.commit()
     return 'Success!', 200
+
 
 # Locations View
 @views.route('/admin/location-view', methods=['GET'])
@@ -700,10 +710,17 @@ def community_delete(id):
 def car_listing_view():
     page = request.args.get('page', 1, type=int)
     page_size = request.args.get('page_size', 10, type=int)
-
     search = request.args.get('search', '', type=str)
 
-    data = Listings.query.filter_by(vehicle_type='car')
+    status = request.args.get('status', '', type=str)
+    if status == "ALL":
+        data = Listings.query.filter_by(vehicle_type='car')
+    elif status == "IN REVIEW":
+        data = Listings.query.filter_by(vehicle_type='car', publish_status=0)
+    elif status == "NOT PUBLISHED":
+        data = Listings.query.filter_by(vehicle_type='car', publish_status=2)
+    elif status == "PUBLISHED":
+        data = Listings.query.filter_by(vehicle_type='car', publish_status=1)
 
     if search:
         search_words = search.split(',')
@@ -729,6 +746,25 @@ def car_listing_view():
     }), 200
 
 
+# UPDATE LISTING PUBLISH STATUS
+@views.route('/admin/update/listing-status/<int:id>', methods=['PUT'])
+@jwt_required()
+@current_user_required
+def listing_update_publish_status(id):
+    new_data = request.get_json()
+
+    data = Listings.query.get(id)
+
+    data.publish_status = new_data['publish_status']
+    data.updated_by = g.current_user['email']
+    data.updated_date = datetime.now()
+
+    db.session.commit()
+
+    updated_data = listing_schema.dump(data)
+    return jsonify({'message': f'Listing Publish Status updated successfully!', 'updated_data': updated_data}), 200
+
+
 # Motorcycle LISTING INFORMATION
 @views.route('/admin/motorcycle-listing-view', methods=['GET'])
 @jwt_required()
@@ -739,7 +775,15 @@ def motorcycle_listing_view():
 
     search = request.args.get('search', '', type=str)
 
-    data = Listings.query.filter_by(vehicle_type='motorcycle')
+    status = request.args.get('status', '', type=str)
+    if status == "ALL":
+        data = Listings.query.filter_by(vehicle_type='motorcycle')
+    elif status == "IN REVIEW":
+        data = Listings.query.filter_by(vehicle_type='motorcycle', publish_status=0)
+    elif status == "NOT PUBLISHED":
+        data = Listings.query.filter_by(vehicle_type='motorcycle', publish_status=2)
+    elif status == "PUBLISHED":
+        data = Listings.query.filter_by(vehicle_type='motorcycle', publish_status=1)
 
     if search:
         search_words = search.split(',')
@@ -772,10 +816,18 @@ def motorcycle_listing_view():
 def boat_listing_view():
     page = request.args.get('page', 1, type=int)
     page_size = request.args.get('page_size', 10, type=int)
+    status = request.args.get('status', '', type=str)
 
     search = request.args.get('search', '', type=str)
 
-    data = Listings.query.filter_by(vehicle_type='boat')
+    if status == "ALL":
+        data = Listings.query.filter_by(vehicle_type='boat')
+    elif status == "IN REVIEW":
+        data = Listings.query.filter_by(vehicle_type='boat', publish_status=0)
+    elif status == "NOT PUBLISHED":
+        data = Listings.query.filter_by(vehicle_type='boat', publish_status=2)
+    elif status == "PUBLISHED":
+        data = Listings.query.filter_by(vehicle_type='boat', publish_status=1)
 
     if search:
         search_words = search.split(',')
@@ -811,7 +863,15 @@ def heavy_vehicle_listing_view():
 
     search = request.args.get('search', '', type=str)
 
-    data = Listings.query.filter_by(vehicle_type='heavy vehicle')
+    status = request.args.get('status', '', type=str)
+    if status == "ALL":
+        data = Listings.query.filter_by(vehicle_type='heavy vehicle')
+    elif status == "IN REVIEW":
+        data = Listings.query.filter_by(vehicle_type='heavy vehicle', publish_status=0)
+    elif status == "NOT PUBLISHED":
+        data = Listings.query.filter_by(vehicle_type='heavy vehicle', publish_status=2)
+    elif status == "PUBLISHED":
+        data = Listings.query.filter_by(vehicle_type='heavy vehicle', publish_status=1)
 
     if search:
         search_words = search.split(',')
@@ -863,6 +923,7 @@ def admin_delete_listing(id):
         return jsonify({'message': 'You are not allowed to update other users listing.'}), 400
     return 'Success!', 200
 
+
 ############### END OF LISTINGS ##################################
 # USER INFORMATION
 @views.route('/admin/users-view', methods=['GET'])
@@ -909,7 +970,7 @@ def all_listing_search():
     page_size = request.args.get('page_size', 10, type=int)
     search = request.args.get('search', '', type=str)
 
-    data = Listings.query
+    data = Listings.query.filter_by(publish_status=1)
 
     if search:
         filter_conditions = []
@@ -1015,6 +1076,8 @@ def additiona_images(id):
 
     result = listing_images_schema.dump(data)
     return jsonify({"data": result})
+
+
 ##################END########################
 
 ###################### CAR LISTING ENDPOINT ###########################
@@ -1033,7 +1096,7 @@ def all_car_view():
     startMileage = request.args.get('startMileage', '', type=str)
     endMileage = request.args.get('endMileage', '', type=str)
 
-    data = Listings.query.filter_by(vehicle_type='car')
+    data = Listings.query.filter_by(vehicle_type='car', publish_status=1)
 
     if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
             startModelYear and endModelYear):
@@ -1090,7 +1153,7 @@ def auth_all_car_view():
     startMileage = request.args.get('startMileage', '', type=str)
     endMileage = request.args.get('endMileage', '', type=str)
 
-    data = Listings.query.filter_by(vehicle_type='car')
+    data = Listings.query.filter_by(vehicle_type='car', publish_status=1)
 
     if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
             startModelYear and endModelYear):
@@ -1177,6 +1240,19 @@ def user_car_view(id):
 @current_user_required
 def car_create():
     new_data = request.form
+    user = User.query.get(g.current_user['id'])
+    featured_as = new_data.get('featured_as', '').lower()
+    if featured_as == 'standard':
+        if user.count_standard_listings >= user.standard_listing:
+            return jsonify({'message': f'Limit Standard Listing is {user.standard_listing}'}), 400
+    elif featured_as == 'featured':
+        if user.count_featured_listings >= user.featured_listing:
+            return jsonify({'message': f'Limit Featured Listing is {user.featured_listing}'}), 400
+    elif featured_as == 'premium':
+        if user.count_premium_listings >= user.premium_listing:
+            return jsonify({'message': f'Limit Premium Listing is {user.premium_listing}'}), 400
+    else:
+        return jsonify({'message': f'No Featured As'}), 400
 
     file_name = None
     file = request.files.get('featured_image')
@@ -1201,8 +1277,9 @@ def car_create():
         model_year=new_data['model_year'],
         variant=new_data['variant'],
         mileage=new_data['mileage'],
+        g_map_location=new_data['g_map_location'],
         vehicle_type='car',
-        featured_as='standard',
+        featured_as=new_data['featured_as'],
         user_id=new_data['user_id'],
         brand_id=new_data['brand_id'],
         location_id=new_data['location_id'],
@@ -1292,6 +1369,7 @@ def update_car(id):
             listing_data.title = title
             listing_data.slug = slug
             listing_data.price = new_data['price']
+            listing_data.g_map_location = new_data['g_map_location']
             listing_data.description = new_data['description']
             listing_data.model = new_data['model']
             listing_data.model_year = new_data['model_year']
@@ -1583,7 +1661,7 @@ def all_motorcycle_view():
     startMileage = request.args.get('startMileage', '', type=str)
     endMileage = request.args.get('endMileage', '', type=str)
 
-    data = Listings.query.filter_by(vehicle_type='motorcycle')
+    data = Listings.query.filter_by(vehicle_type='motorcycle', publish_status=1)
 
     if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
             startModelYear and endModelYear):
@@ -1639,7 +1717,7 @@ def auth_all_motorcycle_view():
     startMileage = request.args.get('startMileage', '', type=str)
     endMileage = request.args.get('endMileage', '', type=str)
 
-    data = Listings.query.filter_by(vehicle_type='motorcycle')
+    data = Listings.query.filter_by(vehicle_type='motorcycle', publish_status=1)
 
     if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
             startModelYear and endModelYear):
@@ -1726,6 +1804,19 @@ def user_motorcycle_view(id):
 @current_user_required
 def motorcycle_create():
     new_data = request.form
+    user = User.query.get(g.current_user['id'])
+    featured_as = new_data.get('featured_as', '').lower()
+    if featured_as == 'standard':
+        if user.count_standard_listings >= user.standard_listing:
+            return jsonify({'message': f'Limit Standard Listing is {user.standard_listing}'}), 400
+    elif featured_as == 'featured':
+        if user.count_featured_listings >= user.featured_listing:
+            return jsonify({'message': f'Limit Featured Listing is {user.featured_listing}'}), 400
+    elif featured_as == 'premium':
+        if user.count_premium_listings >= user.premium_listing:
+            return jsonify({'message': f'Limit Premium Listing is {user.premium_listing}'}), 400
+    else:
+        return jsonify({'message': f'No Featured As'}), 400
 
     file_name = None
     file = request.files.get('featured_image')
@@ -1748,6 +1839,7 @@ def motorcycle_create():
         description=new_data['description'],
         model=new_data['model'],
         model_year=new_data['model_year'],
+        g_map_location=new_data['g_map_location'],
         variant=new_data['variant'],
         mileage=new_data['mileage'],
         vehicle_type='motorcycle',
@@ -1833,6 +1925,7 @@ def update_motorcycle(id):
             listing_data.title = title
             listing_data.slug = slug
             listing_data.price = new_data['price']
+            listing_data.g_map_location = new_data['g_map_location']
             listing_data.description = new_data['description']
             listing_data.model = new_data['model']
             listing_data.model_year = new_data['model_year']
@@ -2096,6 +2189,7 @@ def delete_motorcycle_listing(id):
 
     return 'Success!', 200
 
+
 ########## END OF MOTORCYCLE LISTING ENDPOINT ###########
 
 ########### BOAT LISTING ENDPOINT ################
@@ -2115,7 +2209,7 @@ def all_boat_view():
     startMileage = request.args.get('startMileage', '', type=str)
     endMileage = request.args.get('endMileage', '', type=str)
 
-    data = Listings.query.filter_by(vehicle_type='boat')
+    data = Listings.query.filter_by(vehicle_type='boat', publish_status=1)
 
     if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
             startModelYear and endModelYear):
@@ -2171,7 +2265,7 @@ def auth_all_boat_view():
     startMileage = request.args.get('startMileage', '', type=str)
     endMileage = request.args.get('endMileage', '', type=str)
 
-    data = Listings.query.filter_by(vehicle_type='boat')
+    data = Listings.query.filter_by(vehicle_type='boat', publish_status=1)
 
     if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
             startModelYear and endModelYear):
@@ -2258,6 +2352,19 @@ def user_boat_view(id):
 @current_user_required
 def boat_create():
     new_data = request.form
+    user = User.query.get(g.current_user['id'])
+    featured_as = new_data.get('featured_as', '').lower()
+    if featured_as == 'standard':
+        if user.count_standard_listings >= user.standard_listing:
+            return jsonify({'message': f'Limit Standard Listing is {user.standard_listing}'}), 400
+    elif featured_as == 'featured':
+        if user.count_featured_listings >= user.featured_listing:
+            return jsonify({'message': f'Limit Featured Listing is {user.featured_listing}'}), 400
+    elif featured_as == 'premium':
+        if user.count_premium_listings >= user.premium_listing:
+            return jsonify({'message': f'Limit Premium Listing is {user.premium_listing}'}), 400
+    else:
+        return jsonify({'message': f'No Featured As'}), 400
 
     file_name = None
     file = request.files.get('featured_image')
@@ -2278,6 +2385,7 @@ def boat_create():
         slug=slug,
         price=new_data['price'],
         description=new_data['description'],
+        g_map_location=new_data['g_map_location'],
         model=new_data['model'],
         model_year=new_data['model_year'],
         variant=new_data['variant'],
@@ -2354,6 +2462,7 @@ def update_boat(id):
             listing_data.slug = slug
             listing_data.price = new_data['price']
             listing_data.description = new_data['description']
+            listing_data.g_map_location = new_data['g_map_location']
             listing_data.model = new_data['model']
             listing_data.model_year = new_data['model_year']
             listing_data.variant = new_data['variant']
@@ -2650,7 +2759,7 @@ def all_heavy_vehicle_view():
     startMileage = request.args.get('startMileage', '', type=str)
     endMileage = request.args.get('endMileage', '', type=str)
 
-    data = Listings.query.filter_by(vehicle_type='heavy vehicle')
+    data = Listings.query.filter_by(vehicle_type='heavy vehicle', publish_status=1)
 
     if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
             startModelYear and endModelYear):
@@ -2706,7 +2815,7 @@ def auth_all_heavy_view():
     startMileage = request.args.get('startMileage', '', type=str)
     endMileage = request.args.get('endMileage', '', type=str)
 
-    data = Listings.query.filter_by(vehicle_type='heavy vehicle')
+    data = Listings.query.filter_by(vehicle_type='heavy vehicle', publish_status=1)
 
     if search or brand or (startPrice and endPrice) or (startMileage and endMileage) or (
             startModelYear and endModelYear):
@@ -2793,6 +2902,19 @@ def user_heavy_vehicle_view(id):
 @current_user_required
 def heavy_vehicle_create():
     new_data = request.form
+    user = User.query.get(g.current_user['id'])
+    featured_as = new_data.get('featured_as', '').lower()
+    if featured_as == 'standard':
+        if user.count_standard_listings >= user.standard_listing:
+            return jsonify({'message': f'Limit Standard Listing is {user.standard_listing}'}), 400
+    elif featured_as == 'featured':
+        if user.count_featured_listings >= user.featured_listing:
+            return jsonify({'message': f'Limit Featured Listing is {user.featured_listing}'}), 400
+    elif featured_as == 'premium':
+        if user.count_premium_listings >= user.premium_listing:
+            return jsonify({'message': f'Limit Premium Listing is {user.premium_listing}'}), 400
+    else:
+        return jsonify({'message': f'No Featured As'}), 400
 
     file_name = None
     file = request.files.get('featured_image')
@@ -2815,6 +2937,7 @@ def heavy_vehicle_create():
         description=new_data['description'],
         model=new_data['model'],
         model_year=new_data['model_year'],
+        g_map_location=new_data['g_map_location'],
         variant=new_data['variant'],
         mileage=new_data['mileage'],
         vehicle_type='heavy vehicle',
@@ -2890,6 +3013,7 @@ def update_heavy_vehicle(id):
             listing_data.title = title
             listing_data.slug = slug
             listing_data.price = new_data['price']
+            listing_data.g_map_location = new_data['g_map_location']
             listing_data.description = new_data['description']
             listing_data.model = new_data['model']
             listing_data.model_year = new_data['model_year']
@@ -3225,6 +3349,7 @@ def client_heavy_vehicle_brand_view():
         "total": data.count()
     }), 200
 
+
 # Get Make Based on Brand
 @views.route('/client/make-view', methods=['GET'])
 def client_make_view():
@@ -3238,6 +3363,7 @@ def client_make_view():
         "total": data.count()
     }), 200
 
+
 # Get Trim Based on Make
 @views.route('/client/trim-view', methods=['GET'])
 def client_trim_view():
@@ -3250,6 +3376,7 @@ def client_trim_view():
         "data": result,
         "total": data.count()
     }), 200
+
 
 ########### END OF BRANDS  ENDPOINT#########################
 
@@ -3279,8 +3406,6 @@ def client_community_view():
         "data": result,
         "total": data.count()
     }), 200
-
-
 
 
 ############# END OF LOCATION AND COMMUNITY ENDPOINTS####################
@@ -3427,6 +3552,899 @@ def client_brands_view():
         "data": result,
         "total": data.count()
     }), 200
+
+
+############################# STRIPE INTEGERATION EMBEDED ######################
+@views.route('/create-checkout-session', methods=['POST'])
+@jwt_required()
+@current_user_required
+def create_checkout_session():
+    new_data = request.get_json()
+    try:
+        stripe_customer_id = f'imotorV2_{g.current_user["id"]}'
+        session = stripe.checkout.Session.create(
+            ui_mode='embedded',
+            line_items=[
+                {
+                    'price': new_data['price'],
+                    'quantity': new_data['quantity'],
+                },
+            ],
+            mode='subscription',
+            customer=stripe_customer_id,
+            metadata={
+                'user_id': g.current_user['id'],
+                'user_email': g.current_user['email']
+            },
+            return_url='https://imotor.app/return?session_id={CHECKOUT_SESSION_ID}',
+        )
+    except Exception as e:
+        return str(e)
+
+    return jsonify(clientSecret=session.client_secret)
+
+
+@views.route('/create-checkout-session-native', methods=['POST'])
+def create_checkout_session_native():
+    new_data = request.get_json()
+    try:
+        stripe_customer_id = f'imotorV2_{new_data["user_id"]}'
+        user_data = User.query.get(new_data["user_id"])
+        session = stripe.checkout.Session.create(
+            ui_mode='embedded',
+            line_items=[
+                {
+                    'price': new_data['price'],
+                    'quantity': new_data['quantity'],
+                },
+            ],
+            mode='subscription',
+            customer=stripe_customer_id,
+            metadata={
+                'user_id': user_data.id,
+                'user_email': user_data.email
+            },
+            return_url='https://imotor.app/return-native?session_id={CHECKOUT_SESSION_ID}',
+        )
+    except Exception as e:
+        return str(e)
+
+    return jsonify(clientSecret=session.client_secret)
+
+@views.route('/session-status-native', methods=['GET'])
+def session_status_native():
+    session = stripe.checkout.Session.retrieve(request.args.get('session_id'))
+    return jsonify(status=session.status, billing_email=session.customer_details.email)
+
+@views.route('/session-status', methods=['GET'])
+@jwt_required()
+@current_user_required
+def session_status():
+    session = stripe.checkout.Session.retrieve(request.args.get('session_id'))
+    fullname = f"{g.current_user['first_name']} {g.current_user['last_name']}"
+
+    return jsonify(status=session.status, customer_fullname=fullname, billing_email=session.customer_details.email)
+
+
+@views.route('/webhook', methods=['POST'])
+def stripe_webhook():
+    global plan_id, quantity
+    payload = request.get_data(as_text=True)
+    sig_header = request.headers.get('Stripe-Signature')
+    # whsec_oqxVEZ8EYHv6QGk5dkBkn1h6UK2tXZUv for deployment
+    #whsec_ae47c490c311e3e7eda01bf4ca663cce37e42577fc004f4915c828229bad849f
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, 'whsec_oqxVEZ8EYHv6QGk5dkBkn1h6UK2tXZUv'
+        )
+    except ValueError as e:
+        # Invalid payload
+        return 'Invalid payload', 400
+    except stripe.error.SignatureVerificationError as e:
+        # Invalid signature
+        return 'Invalid signature', 400
+
+    # Handle the event
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        customer_id = session['customer']
+        customer_details = session['customer_details']
+        customer_email = customer_details['email']
+        subscription_id = session.get('subscription')
+        if subscription_id:
+            subscription = stripe.Subscription.retrieve(subscription_id)
+            plan_id = subscription.plan.id
+            quantity = subscription.quantity
+        parts = customer_id.split("_")
+        if len(parts) == 2 and parts[0] == "imotorV2":
+            user_id = parts[1]
+            user_data = User.query.get(user_id)
+            if user_data:
+                if plan_id == 'price_1OmCRADvpPWaX3mF1CHQIjph':
+                    # price_1OrYWIDvpPWaX3mFsWNweyeK
+                    plan_name = 'PREMIUM PACKAGE'
+                    quantity = 1
+                    user_data.standard_listing = user_data.standard_listing + 13
+                    user_data.featured_listing = user_data.featured_listing + 5
+                    user_data.premium_listing = user_data.premium_listing + 2
+                    user_data.is_subscribe_to_package = 1
+                    db.session.commit()
+
+                    invoice = stripe.Invoice.list(customer=f'{customer_id}', limit=1)['data'][0]
+                    invoice_url = invoice.hosted_invoice_url
+
+                    thread = threading.Thread(target=send_confirmation_email,
+                                              args=(customer_email, plan_name, quantity, invoice_url,
+                                                    current_app._get_current_object()))
+                    thread.start()
+                elif plan_id == 'price_1OmCRvDvpPWaX3mFKHD2Ugel':
+                    # price_1OrYWFDvpPWaX3mFQKEQ2HGD
+                    plan_name = 'ADDITIONAL STANDARD LISTING'
+                    user_data.standard_listing = user_data.standard_listing + int(quantity)
+                    db.session.commit()
+
+                    invoice = stripe.Invoice.list(customer=f'{customer_id}', limit=1)['data'][0]
+                    invoice_url = invoice.hosted_invoice_url
+
+                    thread = threading.Thread(target=send_confirmation_email,
+                                              args=(customer_email, plan_name, quantity, invoice_url,
+                                                    current_app._get_current_object()))
+                    thread.start()
+                elif plan_id == 'price_1OmCPfDvpPWaX3mFCTdaJdr0':
+                    # price_1OrYWKDvpPWaX3mFEXsKyKkv
+                    plan_name = 'ADDITIONAL FEATURED LISTING'
+                    user_data.featured_listing = user_data.featured_listing + int(quantity)
+                    db.session.commit()
+
+                    invoice = stripe.Invoice.list(customer=f'{customer_id}', limit=1)['data'][0]
+                    invoice_url = invoice.hosted_invoice_url
+
+                    thread = threading.Thread(target=send_confirmation_email,
+                                              args=(customer_email, plan_name, quantity, invoice_url,
+                                                    current_app._get_current_object()))
+                    thread.start()
+                elif plan_id == 'price_1OmCTUDvpPWaX3mFB6skAGpQ':
+                    # price_1OrYVtDvpPWaX3mFm5djUTrr
+                    plan_name = 'ADDITIONAL PREMIUM LISTING'
+                    user_data.premium_listing = user_data.premium_listing + int(quantity)
+                    db.session.commit()
+
+                    invoice = stripe.Invoice.list(customer=f'{customer_id}', limit=1)['data'][0]
+                    invoice_url = invoice.hosted_invoice_url
+
+                    thread = threading.Thread(target=send_confirmation_email,
+                                              args=(customer_email, plan_name, quantity, invoice_url,
+                                                    current_app._get_current_object()))
+                    thread.start()
+
+        else:
+            print('NO USER DATA: checkout.session.completed')
+
+    # Handle the event
+    if event['type'] == 'customer.subscription.deleted':
+        print('Delete Subscription')
+        subscription = event['data']['object']
+        subscription_id = subscription['id']
+        customer_id = subscription['customer']
+        product_id = subscription['plan']['product']
+        print(customer_id)
+
+        parts = customer_id.split("_")
+        if len(parts) == 2 and parts[0] == "imotorV2":
+            user_id = parts[1]
+            user_data = User.query.get(user_id)
+            if product_id == 'prod_PbPGcIZ8mGDgKt':
+                # prod_PgwPGPw7ro44tD
+                if user_data.is_subscribe_to_package == 1:
+                    old_user_data = user_data.standard_listing
+                    limitation = abs(16 - old_user_data)
+                    user_data.standard_listing = 16
+                    listings = Listings.query.filter_by(user_id=user_data.id, featured_as='standard').order_by(
+                        Listings.created_date.asc()).limit(limitation).all()
+                    for listing in listings:
+                        listing.publish_status = 2
+                        db.session.commit()
+                else:
+                    old_user_data = user_data.standard_listing
+                    limitation = abs(3 - old_user_data)
+                    user_data.standard_listing = 3
+                    listings = Listings.query.filter_by(user_id=user_data.id, featured_as='standard').order_by(
+                        Listings.created_date.asc()).limit(limitation).all()
+                    for listing in listings:
+                        listing.publish_status = 2
+                        db.session.commit()
+            elif product_id == 'prod_PbPEwLQCcVKadd':
+                # prod_PgwPWCQ4vqJCLI
+                if user_data.is_subscribe_to_package == 1:
+                    old_user_data = user_data.featured_listing
+                    limitation = abs(5 - old_user_data)
+                    user_data.featured_listing = 5
+                    listings = Listings.query.filter_by(user_id=user_data.id, featured_as='featured').order_by(
+                        Listings.created_date.asc()).limit(limitation).all()
+                    for listing in listings:
+                        listing.publish_status = 2
+                        db.session.commit()
+                else:
+                    old_user_data = user_data.featured_listing
+                    limitation = abs(0 - old_user_data)
+                    user_data.featured_listing = 0
+                    listings = Listings.query.filter_by(user_id=user_data.id, featured_as='featured').order_by(
+                        Listings.created_date.asc()).limit(limitation).all()
+                    for listing in listings:
+                        listing.publish_status = 2
+                        db.session.commit()
+            elif product_id == 'prod_PbPInhDd5zE2d5':
+                # prod_PgwOWe6kwz1agd
+                if user_data.is_subscribe_to_package == 1:
+                    old_user_data = user_data.premium_listing
+                    limitation = abs(2 - old_user_data)
+                    user_data.premium_listing = 2
+                    listings = Listings.query.filter_by(user_id=user_data.id, featured_as='premium').order_by(
+                        Listings.created_date.asc()).limit(limitation).all()
+                    for listing in listings:
+                        listing.publish_status = 2
+                        db.session.commit()
+                else:
+                    old_user_data = user_data.premium_listing
+                    limitation = abs(0 - old_user_data)
+                    user_data.premium_listing = 0
+                    listings = Listings.query.filter_by(user_id=user_data.id, featured_as='premium').order_by(
+                        Listings.created_date.asc()).limit(limitation).all()
+                    for listing in listings:
+                        listing.publish_status = 2
+                        db.session.commit()
+            elif product_id == 'prod_PbPFZ2qSaqQFS5':
+                print('Delete Subscription: Premium Package')
+                # prod_PgwPz8DTwFRMOp
+                if user_data.standard_listing == 16:
+                    old_user_data = user_data.standard_listing
+                    limitation = abs(3 - old_user_data)
+                    user_data.standard_listing = 3
+                    listings = Listings.query.filter_by(user_id=user_data.id, featured_as='standard').order_by(
+                        Listings.created_date.asc()).limit(limitation).all()
+                    for listing in listings:
+                        listing.publish_status = 2
+                        db.session.commit()
+                else:
+                    limitation = abs(13)
+                    user_data.standard_listing = abs(user_data.standard_listing - 16 + 3)
+                    listings = Listings.query.filter_by(user_id=user_data.id, featured_as='standard').order_by(
+                        Listings.created_date.asc()).limit(limitation).all()
+                    for listing in listings:
+                        listing.publish_status = 2
+                        db.session.commit()
+
+                if user_data.featured_listing == 5:
+                    old_user_data = user_data.featured_listing
+                    limitation = abs(0 - old_user_data)
+                    user_data.featured_listing = 0
+                    listings = Listings.query.filter_by(user_id=user_data.id, featured_as='featured').order_by(
+                        Listings.created_date.asc()).limit(limitation).all()
+                    for listing in listings:
+                        listing.publish_status = 2
+                        db.session.commit()
+                else:
+                    limitation = abs(5)
+                    user_data.featured_listing = abs(user_data.featured_listing - 5)
+                    listings = Listings.query.filter_by(user_id=user_data.id, featured_as='featured').order_by(
+                        Listings.created_date.asc()).limit(limitation).all()
+                    for listing in listings:
+                        listing.publish_status = 2
+                        db.session.commit()
+
+                if user_data.premium_listing == 2:
+                    old_user_data = user_data.premium_listing
+                    limitation = abs(0 - old_user_data)
+                    user_data.premium_listing = 0
+                    listings = Listings.query.filter_by(user_id=user_data.id, featured_as='premium').order_by(
+                        Listings.created_date.asc()).limit(limitation).all()
+                    for listing in listings:
+                        listing.publish_status = 2
+                        db.session.commit()
+                else:
+                    limitation = abs(2)
+                    user_data.premium_listing = abs(user_data.premium_listing - 2)
+                    listings = Listings.query.filter_by(user_id=user_data.id, featured_as='premium').order_by(
+                        Listings.created_date.asc()).limit(limitation).all()
+                    for listing in listings:
+                        listing.publish_status = 2
+                        db.session.commit()
+
+                user_data.is_subscribe_to_package = 0
+            db.session.commit()
+        return '', 200
+
+    if event['type'] == 'invoice.payment_failed':
+        invoice_data = event['data']['object']
+
+        # Extracting information
+        invoice_id = invoice_data['id']
+        customer_id = invoice_data['customer']
+        hosted_invoice_url = invoice_data['hosted_invoice_url']
+        customer_email = invoice_data['customer_email']
+        subscription_id = invoice_data['subscription']
+
+        product_id = None
+        plan_name = None
+        lines = invoice_data.get('lines', {}).get('data', [])
+        if lines:
+            product_id = lines[0].get('price', {}).get('product')
+
+        parts = customer_id.split("_")
+        if len(parts) == 2 and parts[0] == "imotorV2":
+            user_id = parts[1]
+            user_data = User.query.get(user_id)
+            if user_data:
+                if product_id == 'prod_PbPGcIZ8mGDgKt':
+                    # prod_PgwPGPw7ro44tD
+                    plan_name = 'Additional Standard Listing'
+                    if user_data.standard_listing_desc:
+                        pass
+                    else:
+                        # Current date and time
+                        dateNow = datetime.now()
+
+                        # Date and time seven days from now
+                        dateInSevenDays = dateNow + timedelta(days=7)
+
+                        # Format the dates as strings
+                        dateNowFormatted = dateNow.strftime("%Y-%m-%d %H:%M:%S")
+                        dateInSevenDaysFormatted = dateInSevenDays.strftime("%Y-%m-%d %H:%M:%S")
+
+                        user_data.standard_listing_desc = f'Sent First Email on Payment Failed in {dateNowFormatted}, Manual Cancellation will be on {dateInSevenDaysFormatted}'
+                        db.session.commit()
+                elif product_id == 'prod_PbPEwLQCcVKadd':
+                    # prod_PgwPWCQ4vqJCLI
+                    plan_name = 'Additional Featured Listing'
+                    if user_data.featured_listing_desc:
+                        pass
+                    else:
+                        # Current date and time
+                        dateNow = datetime.now()
+
+                        # Date and time seven days from now
+                        dateInSevenDays = dateNow + timedelta(days=7)
+
+                        # Format the dates as strings
+                        dateNowFormatted = dateNow.strftime("%Y-%m-%d %H:%M:%S")
+                        dateInSevenDaysFormatted = dateInSevenDays.strftime("%Y-%m-%d %H:%M:%S")
+
+                        user_data.featured_listing_desc = f'Sent First Email on Payment Failed in {dateNowFormatted}, Manual Cancellation will be on {dateInSevenDaysFormatted}'
+                        db.session.commit()
+                elif product_id == 'prod_PbPInhDd5zE2d5':
+                    # prod_PgwOWe6kwz1agd
+                    plan_name = 'Additional Premium Listing'
+                    if user_data.premium_listing_desc:
+                        pass
+                    else:
+                        # Current date and time
+                        dateNow = datetime.now()
+
+                        # Date and time seven days from now
+                        dateInSevenDays = dateNow + timedelta(days=7)
+
+                        # Format the dates as strings
+                        dateNowFormatted = dateNow.strftime("%Y-%m-%d %H:%M:%S")
+                        dateInSevenDaysFormatted = dateInSevenDays.strftime("%Y-%m-%d %H:%M:%S")
+
+                        user_data.premium_listing_desc = f'Sent First Email on Payment Failed in {dateNowFormatted}, Manual Cancellation will be on {dateInSevenDaysFormatted}'
+                        db.session.commit()
+                elif product_id == 'prod_PbPFZ2qSaqQFS5':
+                    # prod_PgwPz8DTwFRMOp
+                    plan_name = 'Premium Package'
+                    if user_data.premium_package_desc:
+                        pass
+                    else:
+                        # Current date and time
+                        dateNow = datetime.now()
+
+                        # Date and time seven days from now
+                        dateInSevenDays = dateNow + timedelta(days=7)
+
+                        # Format the dates as strings
+                        dateNowFormatted = dateNow.strftime("%Y-%m-%d %H:%M:%S")
+                        dateInSevenDaysFormatted = dateInSevenDays.strftime("%Y-%m-%d %H:%M:%S")
+
+                        user_data.premium_package_desc = f'Sent First Email on Payment Failed in {dateNowFormatted}, Manual Cancellation will be on {dateInSevenDaysFormatted}'
+                        db.session.commit()
+                fullname = f'{user_data.first_name} {user_data.last_name}'
+                thread = threading.Thread(target=send_payment_failed,
+                                          args=(customer_email, fullname, plan_name, hosted_invoice_url,
+                                                current_app._get_current_object()))
+                thread.start()
+
+    if event['type'] == 'invoice.payment_succeeded':
+        invoice_data = event['data']['object']
+
+        # Extracting information
+        invoice_id = invoice_data['id']
+        customer_id = invoice_data['customer']
+        hosted_invoice_url = invoice_data['hosted_invoice_url']
+        customer_email = invoice_data['customer_email']
+        subscription_id = invoice_data['subscription']
+
+        product_id = None
+        plan_name = None
+        lines = invoice_data.get('lines', {}).get('data', [])
+        if lines:
+            product_id = lines[0].get('price', {}).get('product')
+
+        parts = customer_id.split("_")
+        if len(parts) == 2 and parts[0] == "imotorV2":
+            user_id = parts[1]
+            user_data = User.query.get(user_id)
+            if user_data:
+                if product_id == 'prod_PbPGcIZ8mGDgKt':
+                    # prod_PgwPGPw7ro44tD
+                    plan_name = 'Additional Standard Listing'
+                elif product_id == 'prod_PbPEwLQCcVKadd':
+                    # prod_PgwPWCQ4vqJCLI
+                    plan_name = 'Additional Featured Listing'
+                elif product_id == 'prod_PbPInhDd5zE2d5':
+                    # prod_PgwOWe6kwz1agd
+                    plan_name = 'Additional Premium Listing'
+                elif product_id == 'prod_PbPFZ2qSaqQFS5':
+                    # prod_PgwPz8DTwFRMOp
+                    plan_name = 'Premium Package'
+                fullname = f'{user_data.first_name} {user_data.last_name}'
+                thread = threading.Thread(target=send_payment_success,
+                                          args=(customer_email, fullname, plan_name, hosted_invoice_url,
+                                                current_app._get_current_object()))
+                thread.start()
+
+    return '', 200
+
+
+def send_payment_success(user_mail, user_fullname, plan_name, invoice_url, app):
+    with app.app_context():
+        msg = Message(f'Subscription Payment Successful', recipients=[f'{user_mail}'])
+        msg.html = f"""
+                <html lang="en">
+                    <head>
+                        <meta charset="UTF-8">
+                    </head>
+                    <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;">
+                        <div style="max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            <div style="text-align: center; margin-bottom: 20px;">
+                                <h2>Subscription Payment Successful</h2>
+                            </div>
+                            <div style="text-align: left; margin-top: 10px;">
+                                Dear {user_fullname},
+                            </div>
+                            <br/>
+                            <div style="text-align: left">
+                                We are pleased to inform you that your payment for the {plan_name} plan subscription has been successfully processed.
+                            </div>
+                            <br/>
+                            <div style="text-align: left">
+                                You can view your invoice details at the following link: <a href="{invoice_url}">{invoice_url}</a>
+                            </div>
+                            <br/>
+                            <div style="text-align: left">
+                                Thank you for your continued support.
+                            </div>
+                            <br/>
+                            <div style="text-align: left">
+                                Best regards,
+                            </div>
+                            <div style="text-align: left">
+                                Imotor Team
+                            </div>
+                        </div>
+                    </body>
+                </html>
+        """
+        msg.mimetype = 'text/html'
+        mail.send(msg)
+
+
+def send_payment_failed(user_mail, user_fullname, plan_name, invoice_url, app):
+    with app.app_context():
+        msg = Message(f'Subscription Payment Failed', recipients=[f'{user_mail}'])
+        msg.html = f"""
+                <html lang="en">
+                    <head>
+                        <meta charset="UTF-8">
+                    </head>
+                    <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;">
+                        <div style="max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            <div style="text-align: center; margin-bottom: 20px;">
+                                <h2>Subscription Payment Failed</h2>
+                            </div>
+                            <div style="text-align: left; margin-top: 10px;">
+                                Dear {user_fullname},
+                            </div>
+                            <br/>
+                            <div style="text-align: left">
+                                We noticed that there was an issue processing your payment for the {plan_name} plan subscription.
+                                To avoid interruption of your service, please update your payment information within the next 7 days.
+                            </div>
+                            <br/>
+                            <div style="text-align: left">
+                                Please find your invoice details at the following link: <a href="{invoice_url}">{invoice_url}</a>
+                            </div>
+                            <br/>
+                            <div style="text-align: left">
+                                Best regards,
+                            </div>
+                            <div style="text-align: left">
+                                Imotor Team
+                            </div>
+                        </div>
+                    </body>
+                </html>
+        """
+        msg.mimetype = 'text/html'
+        mail.send(msg)
+
+
+def send_confirmation_email(user_email, plan_name, quantity, invoice_url, app):
+    with app.app_context():
+        msg = Message(f'Subscription Confirmation', recipients=[f'{user_email}'])
+        if plan_name == 'PREMIUM PACKAGE':
+            msg.html = f"""
+                    <html lang="en">
+                        <head>
+                            <meta charset="UTF-8">
+                        </head>
+                        <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;">
+                            <div style="max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                <div style="text-align: center; margin-bottom: 20px;">
+                                    <h2>Subscription Confirmation</h2>
+                                </div>
+                                <div style="text-align: left; margin-top: 10px;">
+                                    Dear User,
+                                </div>
+                                <br/>
+                                <div style="text-align: left">
+                                    Thank you for your subscription to our service. You have successfully subscribed to the {plan_name} plan.
+                                </div>
+                                <br/>
+                                <div style="text-align: left">
+                                    Please find your invoice details at the following link: <a href="{invoice_url}">{invoice_url}</a>
+                                </div>
+                                <br/>
+                                <div style="text-align: left">
+                                    Best regards,
+                                </div>
+                                <div style="text-align: left">
+                                    Imotor Team
+                                </div>
+                            </div>
+                        </body>
+                    </html>
+            """
+        else:
+            msg.html = f"""
+                               <html lang="en">
+                                   <head>
+                                       <meta charset="UTF-8">
+                                   </head>
+                                   <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;">
+                                       <div style="max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                           <div style="text-align: center; margin-bottom: 20px;">
+                                               <h2>Subscription Confirmation</h2>
+                                           </div>
+                                           <div style="text-align: left; margin-top: 10px;">
+                                               Dear User,
+                                           </div>
+                                                 <br/>
+                                           <div style="text-align: left">
+                                               Thank you for your subscription to our service. You have successfully subscribed to the {plan_name} plan with a quantity of {quantity}.
+                                           </div>
+                                           <br/>
+                                            <div style="text-align: left">
+                                                Please find your invoice details at the following link: <a href="{invoice_url}">{invoice_url}</a>
+                                            </div>
+                                           <br/>
+                                           <div style="text-align: left">
+                                               Best regards,
+                                           </div>
+                                           <div style="text-align: left">
+                                               Imotor Team
+                                           </div>
+                                       </div>
+                                   </body>
+                               </html>
+                       """
+        msg.mimetype = 'text/html'
+        mail.send(msg)
+
+
+@views.route('/import-all-user-to-stripe', methods=['POST'])
+def import_users_to_stripe():
+    # Retrieve users from your database
+    users = User.query.all()  # Assuming User is your SQLAlchemy model
+
+    for user in users:
+        try:
+            # Create a customer in Stripe using the user's ID as the customer ID
+            stripe.Customer.create(
+                id=f'imotorV2_{user.id}',
+                name=f'{user.first_name} {user.last_name}'
+                # Add other optional parameters as needed
+            )
+            print(f"Imported user {user.id} to Stripe.")
+        except stripe.error.StripeError as e:
+            # Handle any errors
+            print(f"Error importing user {user.id} to Stripe: {e}")
+    return '', 200
+
+
+@views.route('/get-user-subscription', methods=['GET'])
+@jwt_required()
+@current_user_required
+def get_subscriptions():
+    customer_id = f'imotorV2_{g.current_user["id"]}'
+    # Make a request to the Stripe API endpoint
+    url = f'https://api.stripe.com/v1/subscriptions?customer={customer_id}'
+    headers = {
+        'Authorization': f'Bearer {stripe.api_key}',
+        'Content-Type': 'application/json'
+    }
+    response = requests.get(url, headers=headers)
+
+    # Check if the request was successful
+    if response.status_code == 200:
+        subscriptions = response.json()
+        return jsonify(subscriptions), 200
+    else:
+        return jsonify({'error': 'Failed to fetch subscriptions'}), 500
+
+
+@views.route('/upgrade-subscription', methods=['POST'])
+@jwt_required()
+@current_user_required
+def upgrade_subscription():
+    # Get the subscription ID and new quantity from the request
+    subscription_id = request.json.get('subscriptionId')
+    product_id = request.json.get('productId')
+    new_quantity = request.json.get('newQuantity')
+    print(subscription_id, product_id, new_quantity)
+    try:
+        print("entering TRY")
+        # Retrieve the subscription from Stripe
+        subscription = stripe.Subscription.retrieve(subscription_id)
+
+        # Update the subscription quantity
+        subscription.quantity = new_quantity
+        subscription.save()
+        print("SAVED")
+        user_data = User.query.get(g.current_user["id"])
+        print(user_data)
+        if product_id == 'prod_PbPGcIZ8mGDgKt':
+            # prod_PgwPGPw7ro44tD
+            if user_data.is_subscribe_to_package == 0:
+                user_data.standard_listing = 3 + int(new_quantity)
+                db.session.commit()
+            elif user_data.is_subscribe_to_package == 1:
+                user_data.standard_listing = 16 + int(new_quantity)
+                db.session.commit()
+        elif product_id == 'prod_PbPEwLQCcVKadd':
+            # prod_PgwPWCQ4vqJCLI
+            if user_data.is_subscribe_to_package == 0:
+                user_data.featured_listing = 0 + int(new_quantity)
+                db.session.commit()
+            elif user_data.is_subscribe_to_package == 1:
+                user_data.featured_listing = 5 + int(new_quantity)
+                db.session.commit()
+        elif product_id == 'prod_PbPInhDd5zE2d5':
+            # prod_PgwOWe6kwz1agd
+            if user_data.is_subscribe_to_package == 0:
+                user_data.premium_listing = 0 + int(new_quantity)
+                db.session.commit()
+            elif user_data.is_subscribe_to_package == 1:
+                user_data.premium_listing = 2 + int(new_quantity)
+                db.session.commit()
+
+        return jsonify({'message': 'Subscription upgraded successfully'}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@views.route('/cancel-subscription/<subscription_id>', methods=['POST'])
+@jwt_required()
+@current_user_required
+def cancel_subscription(subscription_id):
+    try:
+        # Retrieve the subscription from Stripe
+        subscription = stripe.Subscription.retrieve(subscription_id)
+
+        # Schedule the subscription for cancellation at the end of the current billing period
+        subscription.cancel_at_period_end = True
+        subscription.save()
+
+        return jsonify({'message': 'Subscription scheduled for cancellation at the end of the billing period'}), 200
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@views.route('/products', methods=['GET'])
+def get_products():
+    try:
+        products = stripe.Product.list(limit=10)  # Fetch up to 10 products (adjust limit as needed)
+        active_products = []
+        for product in products.data:
+            if product.active:  # Check if the product is active
+                default_price_id = product.default_price
+                if default_price_id:  # Check if default_price_id is not None
+                    try:
+                        default_price = stripe.Price.retrieve(default_price_id)
+                        product_info = {
+                            "product_id": product.id,
+                            "price_id": product.default_price,
+                            "description": product.description,
+                            "name": product.name,
+                            "unit_amount": default_price.unit_amount_decimal,
+                        }
+                        active_products.append(product_info)
+                    except stripe.error.StripeError as e:
+                        print(f"Error retrieving price for product {product.id}: {e}")
+        return jsonify({"data": active_products})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@views.route('/add_payment_method', methods=['POST'])
+@jwt_required()
+@current_user_required
+def add_payment_method():
+    # Assuming the payment information is sent in the request body as JSON
+    payment_info = request.json
+
+    customer = stripe.Customer.retrieve(f"imotorV2_{g.current_user['id']}")
+
+    # Create a PaymentMethod from the token
+    payment_method = stripe.PaymentMethod.create(
+        type='card',
+        card={
+            'token': payment_info['token'],  # Use the token to create the PaymentMethod
+        }
+    )
+
+    # Attach the PaymentMethod to the customer
+    stripe.PaymentMethod.attach(payment_method.id, customer=customer.id)
+
+    # Update the PaymentMethod to include billing details
+    payment_method = stripe.PaymentMethod.modify(
+        payment_method.id,
+        billing_details={
+            'name': payment_info['cardholder_name']  # Include the cardholder's name
+        }
+    )
+
+    # Set the new PaymentMethod as the default for the customer
+    customer.invoice_settings.default_payment_method = payment_method.id
+    customer.save()
+
+    # Return success response to the frontend
+    return jsonify({'message': 'Payment method added successfully'})
+
+
+@views.route('/update_payment_method', methods=['POST'])
+@jwt_required()
+@current_user_required
+def update_payment_method():
+    # Assuming the updated payment information is sent in the request body as JSON
+    updated_payment_info = request.json
+
+    pm_id = updated_payment_info['pmId']
+    token = updated_payment_info['token']
+
+    # Detach the existing payment method
+    stripe.PaymentMethod.detach(pm_id)
+
+    # Retrieve the Stripe customer object associated with the currently logged-in user
+    customer = stripe.Customer.retrieve(f"imotorV2_{g.current_user['id']}")
+
+    # Create a new PaymentMethod from the token
+    new_payment_method = stripe.PaymentMethod.create(
+        type='card',
+        card={
+            'token': token,
+        }
+    )
+
+    # Attach the new PaymentMethod to the customer
+    stripe.PaymentMethod.attach(new_payment_method.id, customer=customer.id)
+
+    # Set the new PaymentMethod as the default for the customer
+    customer.invoice_settings.default_payment_method = new_payment_method.id
+    customer.save()
+
+    # Return success response to the frontend
+    return jsonify({'message': 'Payment method updated successfully'})
+
+
+# Endpoint to retrieve the user's default payment method
+@views.route('/get_default_payment_method', methods=['GET'])
+@jwt_required()
+@current_user_required
+def get_default_payment_method():
+    # Retrieve the Stripe customer object associated with the currently logged-in user
+    customer = stripe.Customer.retrieve(f"imotorV2_{g.current_user['id']}")
+
+    # Retrieve the default payment method from the invoice settings
+    invoice_settings = customer.get('invoice_settings', {})
+    default_payment_method_id = invoice_settings.get('default_payment_method')
+
+    if default_payment_method_id:
+        # Retrieve the details of the default payment method
+        payment_method = stripe.PaymentMethod.retrieve(default_payment_method_id)
+
+        # Return the payment method details to the frontend
+        return jsonify(payment_method)
+    else:
+        return jsonify({'error': 'Default payment method not found'}), 400
+
+
+@views.route('/get_payment_methods', methods=['GET'])
+@jwt_required()
+@current_user_required
+def get_payment_methods():
+    try:
+        # Retrieve the Stripe customer object associated with the currently logged-in user
+        customer = stripe.Customer.retrieve(f"imotorV2_{g.current_user['id']}")
+
+        # Retrieve all payment methods associated with the customer
+        payment_methods = stripe.PaymentMethod.list(customer=customer.id)
+
+        # Convert payment methods to JSON and return to the frontend
+        return jsonify(payment_methods.data)
+    except stripe.error.StripeError as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# Endpoint to update the default payment method of the user
+@views.route('/update_default_payment_method', methods=['POST'])
+@jwt_required()
+@current_user_required
+def update_default_payment_method():
+    try:
+        # Retrieve the payment method ID from the request body
+        data = request.json
+        payment_method_id = data.get('payment_method_id')
+
+        if not payment_method_id:
+            return jsonify({'error': 'Payment method ID is required'}), 400
+
+        # Retrieve the Stripe customer object associated with the currently logged-in user
+        customer = stripe.Customer.retrieve(f"imotorV2_{g.current_user['id']}")
+
+        # Update the default payment method for the customer
+        customer.default_payment_method = payment_method_id
+        customer.save()
+
+        return jsonify({'message': 'Default payment method updated successfully'})
+    except stripe.error.StripeError as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@views.route('/delete_payment_method', methods=['POST'])
+@jwt_required()
+@current_user_required
+def delete_payment_method():
+    print("initialize delete")
+    try:
+        # Retrieve the payment method ID from the request body
+        data = request.json
+        print(data)
+        payment_method_id = data.get('payment_method_id')
+        print(payment_method_id)
+
+        if not payment_method_id:
+            print('Payment not found')
+            return jsonify({'error': 'Payment method ID is required'}), 400
+
+        # Detach (delete) the payment method
+        stripe.PaymentMethod.detach(payment_method_id)
+
+        return jsonify({'message': 'Payment method deleted successfully'})
+    except stripe.error.StripeError as e:
+        print(e)
+        return jsonify({'error': str(e)}), 500
 
 
 ############################# END OF BRANDS ENDPOINT ####################

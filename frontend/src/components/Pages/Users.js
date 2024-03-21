@@ -94,9 +94,10 @@ function Users() {
                                 data.map((data) => (
                                     <tr key={data.id}>
                                         <td>
-                                            <img src={`${process.env.REACT_APP_API_URL}/uploaded_img/${data.profile_picture}`}
-                                                 className='rounded-1 img-fluid img-thumbnail'
-                                                 alt="Thumbnail" style={{
+                                            <img
+                                                src={`${process.env.REACT_APP_API_URL}/uploaded_img/${data.profile_picture}`}
+                                                className='rounded-1 img-fluid img-thumbnail'
+                                                alt="Thumbnail" style={{
                                                 width: '50px',
                                                 height: '50px',
                                             }}/>
@@ -108,6 +109,8 @@ function Users() {
                                         <td>{data.whats_app_number}</td>
                                         <td>{data.viber_number}</td>
                                         <td>{data.verified_name}</td>
+                                        <td>{data.standard_listing}</td>
+                                        <td>{data.standard_listings_count}</td>
                                     </tr>
                                 )))}
                             </tbody>
