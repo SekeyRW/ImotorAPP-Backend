@@ -9,16 +9,26 @@ from PIL import Image
 from flask import Blueprint, jsonify, request, send_from_directory, current_app, g
 from flask_jwt_extended import jwt_required
 from flask_mail import Message
+from flask_socketio import join_room, leave_room
 from slugify import slugify
-from sqlalchemy import or_, and_
+from sqlalchemy import or_, and_, desc
 from werkzeug.utils import secure_filename
 
-from . import db, bcrypt, allowed_file, stripe, mail
+from . import db, bcrypt, allowed_file, stripe, mail, socketio
 from .decorators import current_user_required
 from .models import Admin, Brand, Location, Community, Cars, Listings, ListingImage, SafetyFeatures, ListingAmenities, \
-    User, Motorcycle, Boats, HeavyVehicles, Favorites, Make, Trim
+    User, Motorcycle, Boats, HeavyVehicles, Favorites, Make, Trim, Conversation, Messages, PushToken
 from .schemas import BrandSchema, CommunitySchema, ListingsSchema, CarsSchema, UserSchema, ListingImageSchema, \
     FavoritesSchema, TrimSchema, MakeSchema
+
+from exponent_server_sdk import (
+    DeviceNotRegisteredError,
+    PushClient,
+    PushMessage,
+    PushServerError,
+    PushTicketError,
+)
+from requests.exceptions import ConnectionError, HTTPError
 
 views = Blueprint('views', __name__)
 
@@ -176,6 +186,42 @@ def brand_create():
     new_added_data = brand_schema.dump(new_data2)
     return jsonify({'message': 'Brand successfully added!', 'new_data': new_added_data}), 200
 
+#Delete User Admin Side
+@views.route('/admin/delete/user/<int:id>', methods=['DELETE'])
+@jwt_required()
+@current_user_required
+def admin_delete_user(id):
+    data = User.query.get(id)
+    if data is None:
+        return jsonify({'message': 'User not found.'}), 400
+
+    listing_data = Listings.query.filter_by(user_id=id)
+    for listing in listing_data:
+        listing_feature_image = listing.featured_image
+        if listing_feature_image:
+            image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], listing_feature_image)
+            if os.path.exists(image_path):
+                os.remove(image_path)
+        listing_image_data = ListingImage.query.filter_by(listing_id=listing.id)
+        for images in listing_image_data:
+            image_data = images.image
+            if image_data:
+                image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], image_data)
+                if os.path.exists(image_path):
+                    os.remove(image_path)
+
+    profile_picture = data.profile_picture
+    if profile_picture == 'default_profile_picture.jpg':
+        pass
+    else:
+        image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], profile_picture)
+        if os.path.exists(image_path):
+            os.remove(image_path)
+
+    db.session.delete(data)
+    db.session.commit()
+
+    return 'Success!', 200
 
 # Brands Update
 @views.route('/admin/brand-update/<int:id>', methods=['PUT'])
@@ -729,6 +775,8 @@ def car_listing_view():
             word = word.strip()
             return or_(
                 Listings.title.ilike(f"%{word}%"),
+                Listings.user.has(User.first_name.ilike(f"%{word}%")),
+                Listings.user.has(User.last_name.ilike(f"%{word}%"))
             )
 
         filter_conditions = [search_filter(word) for word in search_words]
@@ -792,6 +840,8 @@ def motorcycle_listing_view():
             word = word.strip()
             return or_(
                 Listings.title.ilike(f"%{word}%"),
+                Listings.user.has(User.first_name.ilike(f"%{word}%")),
+                Listings.user.has(User.last_name.ilike(f"%{word}%"))
             )
 
         filter_conditions = [search_filter(word) for word in search_words]
@@ -836,6 +886,8 @@ def boat_listing_view():
             word = word.strip()
             return or_(
                 Listings.title.ilike(f"%{word}%"),
+                Listings.user.has(User.first_name.ilike(f"%{word}%")),
+                Listings.user.has(User.last_name.ilike(f"%{word}%"))
             )
 
         filter_conditions = [search_filter(word) for word in search_words]
@@ -880,6 +932,8 @@ def heavy_vehicle_listing_view():
             word = word.strip()
             return or_(
                 Listings.title.ilike(f"%{word}%"),
+                Listings.user.has(User.first_name.ilike(f"%{word}%")),
+                Listings.user.has(User.last_name.ilike(f"%{word}%"))
             )
 
         filter_conditions = [search_filter(word) for word in search_words]
@@ -984,7 +1038,12 @@ def all_listing_search():
 
         data = data.filter(and_(*filter_conditions))
 
-    data = data.order_by(Listings.id.desc())
+    # Modify the ordering part of the query
+    data = data.order_by(
+        -(Listings.featured_as == 'premium'),  # Premium listings come first
+        -(Listings.featured_as == 'featured'),  # Then featured listings
+        desc(Listings.id)  # Secondary ordering by id in descending order
+    )
 
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
@@ -1121,7 +1180,12 @@ def all_car_view():
 
         data = data.filter(and_(*filter_conditions))
 
-    data = data.order_by(Listings.id.desc())
+    # Modify the ordering part of the query
+    data = data.order_by(
+        -(Listings.featured_as == 'premium'),  # Premium listings come first
+        -(Listings.featured_as == 'featured'),  # Then featured listings
+        desc(Listings.id)  # Secondary ordering by id in descending order
+    )
 
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
@@ -1178,7 +1242,12 @@ def auth_all_car_view():
 
         data = data.filter(and_(*filter_conditions))
 
-    data = data.order_by(Listings.id.desc())
+    # Modify the ordering part of the query
+    data = data.order_by(
+        -(Listings.featured_as == 'premium'),  # Premium listings come first
+        -(Listings.featured_as == 'featured'),  # Then featured listings
+        desc(Listings.id)  # Secondary ordering by id in descending order
+    )
 
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
@@ -1222,7 +1291,12 @@ def user_car_view(id):
         filter_conditions = [search_filter(word) for word in search_words]
         data = data.filter(*filter_conditions)
 
-    data = data.order_by(Listings.id.desc())
+    # Modify the ordering part of the query
+    data = data.order_by(
+        -(Listings.featured_as == 'premium'),  # Premium listings come first
+        -(Listings.featured_as == 'featured'),  # Then featured listings
+        desc(Listings.id)  # Secondary ordering by id in descending order
+    )
 
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
@@ -1685,7 +1759,12 @@ def all_motorcycle_view():
 
         data = data.filter(and_(*filter_conditions))
 
-    data = data.order_by(Listings.id.desc())
+    # Modify the ordering part of the query
+    data = data.order_by(
+        -(Listings.featured_as == 'premium'),  # Premium listings come first
+        -(Listings.featured_as == 'featured'),  # Then featured listings
+        desc(Listings.id)  # Secondary ordering by id in descending order
+    )
 
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
@@ -1742,7 +1821,12 @@ def auth_all_motorcycle_view():
 
         data = data.filter(and_(*filter_conditions))
 
-    data = data.order_by(Listings.id.desc())
+    # Modify the ordering part of the query
+    data = data.order_by(
+        -(Listings.featured_as == 'premium'),  # Premium listings come first
+        -(Listings.featured_as == 'featured'),  # Then featured listings
+        desc(Listings.id)  # Secondary ordering by id in descending order
+    )
 
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
@@ -1786,7 +1870,12 @@ def user_motorcycle_view(id):
         filter_conditions = [search_filter(word) for word in search_words]
         data = data.filter(*filter_conditions)
 
-    data = data.order_by(Listings.id.desc())
+    # Modify the ordering part of the query
+    data = data.order_by(
+        -(Listings.featured_as == 'premium'),  # Premium listings come first
+        -(Listings.featured_as == 'featured'),  # Then featured listings
+        desc(Listings.id)  # Secondary ordering by id in descending order
+    )
 
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
@@ -1843,7 +1932,7 @@ def motorcycle_create():
         variant=new_data['variant'],
         mileage=new_data['mileage'],
         vehicle_type='motorcycle',
-        featured_as='standard',
+        featured_as=new_data['featured_as'],
         user_id=new_data['user_id'],
         brand_id=new_data['brand_id'],
         location_id=new_data['location_id'],
@@ -2233,7 +2322,12 @@ def all_boat_view():
 
         data = data.filter(and_(*filter_conditions))
 
-    data = data.order_by(Listings.id.desc())
+    # Modify the ordering part of the query
+    data = data.order_by(
+        -(Listings.featured_as == 'premium'),  # Premium listings come first
+        -(Listings.featured_as == 'featured'),  # Then featured listings
+        desc(Listings.id)  # Secondary ordering by id in descending order
+    )
 
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
@@ -2290,7 +2384,12 @@ def auth_all_boat_view():
 
         data = data.filter(and_(*filter_conditions))
 
-    data = data.order_by(Listings.id.desc())
+    # Modify the ordering part of the query
+    data = data.order_by(
+        -(Listings.featured_as == 'premium'),  # Premium listings come first
+        -(Listings.featured_as == 'featured'),  # Then featured listings
+        desc(Listings.id)  # Secondary ordering by id in descending order
+    )
 
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
@@ -2334,7 +2433,12 @@ def user_boat_view(id):
         filter_conditions = [search_filter(word) for word in search_words]
         data = data.filter(*filter_conditions)
 
-    data = data.order_by(Listings.id.desc())
+    # Modify the ordering part of the query
+    data = data.order_by(
+        -(Listings.featured_as == 'premium'),  # Premium listings come first
+        -(Listings.featured_as == 'featured'),  # Then featured listings
+        desc(Listings.id)  # Secondary ordering by id in descending order
+    )
 
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
@@ -2391,7 +2495,7 @@ def boat_create():
         variant=new_data['variant'],
         mileage=new_data['mileage'],
         vehicle_type='boat',
-        featured_as='standard',
+        featured_as=new_data['featured_as'],
         user_id=new_data['user_id'],
         brand_id=new_data['brand_id'],
         location_id=new_data['location_id'],
@@ -2783,7 +2887,12 @@ def all_heavy_vehicle_view():
 
         data = data.filter(and_(*filter_conditions))
 
-    data = data.order_by(Listings.id.desc())
+    # Modify the ordering part of the query
+    data = data.order_by(
+        -(Listings.featured_as == 'premium'),  # Premium listings come first
+        -(Listings.featured_as == 'featured'),  # Then featured listings
+        desc(Listings.id)  # Secondary ordering by id in descending order
+    )
 
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
@@ -2840,7 +2949,12 @@ def auth_all_heavy_view():
 
         data = data.filter(and_(*filter_conditions))
 
-    data = data.order_by(Listings.id.desc())
+    # Modify the ordering part of the query
+    data = data.order_by(
+        -(Listings.featured_as == 'premium'),  # Premium listings come first
+        -(Listings.featured_as == 'featured'),  # Then featured listings
+        desc(Listings.id)  # Secondary ordering by id in descending order
+    )
 
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
@@ -2884,7 +2998,12 @@ def user_heavy_vehicle_view(id):
         filter_conditions = [search_filter(word) for word in search_words]
         data = data.filter(*filter_conditions)
 
-    data = data.order_by(Listings.id.desc())
+    # Modify the ordering part of the query
+    data = data.order_by(
+        -(Listings.featured_as == 'premium'),  # Premium listings come first
+        -(Listings.featured_as == 'featured'),  # Then featured listings
+        desc(Listings.id)  # Secondary ordering by id in descending order
+    )
 
     data_paginated = data.limit(page_size).offset((page - 1) * page_size).all()
 
@@ -2941,7 +3060,7 @@ def heavy_vehicle_create():
         variant=new_data['variant'],
         mileage=new_data['mileage'],
         vehicle_type='heavy vehicle',
-        featured_as='standard',
+        featured_as=new_data['featured_as'],
         user_id=new_data['user_id'],
         brand_id=new_data['brand_id'],
         location_id=new_data['location_id'],
@@ -3633,6 +3752,7 @@ def stripe_webhook():
     sig_header = request.headers.get('Stripe-Signature')
     # whsec_oqxVEZ8EYHv6QGk5dkBkn1h6UK2tXZUv for deployment
     #whsec_ae47c490c311e3e7eda01bf4ca663cce37e42577fc004f4915c828229bad849f
+
     try:
         event = stripe.Webhook.construct_event(
             payload, sig_header, 'whsec_oqxVEZ8EYHv6QGk5dkBkn1h6UK2tXZUv'
@@ -4006,8 +4126,10 @@ def send_payment_success(user_mail, user_fullname, plan_name, invoice_url, app):
                     <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;">
                         <div style="max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                             <div style="text-align: center; margin-bottom: 20px;">
+                                <img src="https://imotor.app/imotorlogo_w_icon.png" alt="Your Logo" style="width: 200px; height: auto; margin-bottom: 10px;">
                                 <h2>Subscription Payment Successful</h2>
                             </div>
+                            <hr style="border: none; height: 2px; background-color: #0F5DA8;">
                             <div style="text-align: left; margin-top: 10px;">
                                 Dear {user_fullname},
                             </div>
@@ -4030,6 +4152,7 @@ def send_payment_success(user_mail, user_fullname, plan_name, invoice_url, app):
                             <div style="text-align: left">
                                 Imotor Team
                             </div>
+                            <hr style="border: none; height: 2px; background-color: #4CAF4F;">
                         </div>
                     </body>
                 </html>
@@ -4049,8 +4172,10 @@ def send_payment_failed(user_mail, user_fullname, plan_name, invoice_url, app):
                     <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;">
                         <div style="max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                             <div style="text-align: center; margin-bottom: 20px;">
+                                 <img src="https://imotor.app/imotorlogo_w_icon.png" alt="Your Logo" style="width: 200px; height: auto; margin-bottom: 10px;">
                                 <h2>Subscription Payment Failed</h2>
                             </div>
+                            <hr style="border: none; height: 2px; background-color: #0F5DA8;">
                             <div style="text-align: left; margin-top: 10px;">
                                 Dear {user_fullname},
                             </div>
@@ -4070,6 +4195,7 @@ def send_payment_failed(user_mail, user_fullname, plan_name, invoice_url, app):
                             <div style="text-align: left">
                                 Imotor Team
                             </div>
+                            <hr style="border: none; height: 2px; background-color: #4CAF4F;">
                         </div>
                     </body>
                 </html>
@@ -4090,8 +4216,10 @@ def send_confirmation_email(user_email, plan_name, quantity, invoice_url, app):
                         <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;">
                             <div style="max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                                 <div style="text-align: center; margin-bottom: 20px;">
+                                    <img src="https://imotor.app/imotorlogo_w_icon.png" alt="Your Logo" style="width: 200px; height: auto; margin-bottom: 10px;">
                                     <h2>Subscription Confirmation</h2>
                                 </div>
+                                <hr style="border: none; height: 2px; background-color: #0F5DA8;">
                                 <div style="text-align: left; margin-top: 10px;">
                                     Dear User,
                                 </div>
@@ -4110,6 +4238,7 @@ def send_confirmation_email(user_email, plan_name, quantity, invoice_url, app):
                                 <div style="text-align: left">
                                     Imotor Team
                                 </div>
+                                <hr style="border: none; height: 2px; background-color: #4CAF4F;">
                             </div>
                         </body>
                     </html>
@@ -4123,8 +4252,10 @@ def send_confirmation_email(user_email, plan_name, quantity, invoice_url, app):
                                    <body style="font-family: Arial, sans-serif; background-color: #f4f4f4; margin: 0; padding: 20px;">
                                        <div style="max-width: 600px; margin: 0 auto; background-color: #fff; padding: 20px; border-radius: 5px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                                            <div style="text-align: center; margin-bottom: 20px;">
+                                                <img src="https://imotor.app/imotorlogo_w_icon.png" alt="Your Logo" style="width: 200px; height: auto; margin-bottom: 10px;">
                                                <h2>Subscription Confirmation</h2>
                                            </div>
+                                           <hr style="border: none; height: 2px; background-color: #0F5DA8;">
                                            <div style="text-align: left; margin-top: 10px;">
                                                Dear User,
                                            </div>
@@ -4143,6 +4274,7 @@ def send_confirmation_email(user_email, plan_name, quantity, invoice_url, app):
                                            <div style="text-align: left">
                                                Imotor Team
                                            </div>
+                                           <hr style="border: none; height: 2px; background-color: #4CAF4F;">
                                        </div>
                                    </body>
                                </html>
@@ -4449,14 +4581,290 @@ def delete_payment_method():
 
 ############################# END OF BRANDS ENDPOINT ####################
 
-# FOR TESTING DATA
-@views.route('/test', methods=['POST'])
-def test():
-    new_data = request.form
-    print(new_data['safety_features'])
-    safety_features = new_data['safety_features'].split(', ')
-    print(safety_features)
+
+############################ FOR RESUBMITTION OF LISTING ################
+@views.route('/client/listing-resubmit/<int:id>', methods=['POST'])
+@jwt_required()
+@current_user_required
+def listing_resubmit(id):
+    new_data = request.get_json()
+    user = User.query.get(g.current_user['id'])
+    featured_as = new_data['featured_as'].lower()
+    if featured_as == 'standard':
+        if user.count_standard_listings >= user.standard_listing:
+            return jsonify({'message': f'Limit Standard Listing is {user.standard_listing}'}), 400
+    elif featured_as == 'featured':
+        if user.count_featured_listings >= user.featured_listing:
+            return jsonify({'message': f'Limit Featured Listing is {user.featured_listing}'}), 400
+    elif featured_as == 'premium':
+        if user.count_premium_listings >= user.premium_listing:
+            return jsonify({'message': f'Limit Premium Listing is {user.premium_listing}'}), 400
+    else:
+        return jsonify({'message': f'No Featured As'}), 400
+    data_listing = Listings.query.filter_by(id=id, user_id=user.id).first()
+    if data_listing:
+        listing_data = Listings.query.get(id)
+        if listing_data:
+            listing_data.featured_as = new_data['featured_as']
+            listing_data.publish_status = 0
+            db.session.commit()
+        else:
+            return jsonify({'message': 'Listing not found.'}), 400
+    else:
+        return jsonify({'message': 'You are not allowed to update other users listing.'}), 400
+
+    updated_data = listing_schema.dump(listing_data)
+    return jsonify({'message': f'Listing Successfully Submitted to In Review!', 'updated_data': updated_data}), 200
+
+
+@views.route('/client/listing-unpublish/<int:id>', methods=['POST'])
+@jwt_required()
+@current_user_required
+def listing_unpublish(id):
+    user = User.query.get(g.current_user['id'])
+    data_listing = Listings.query.filter_by(id=id, user_id=user.id).first()
+    if data_listing:
+        listing_data = Listings.query.get(id)
+        if listing_data:
+            listing_data.publish_status = 2
+            db.session.commit()
+        else:
+            return jsonify({'message': 'Listing not found.'}), 400
+    else:
+        return jsonify({'message': 'You are not allowed to update other users listing.'}), 400
+
+    updated_data = listing_schema.dump(listing_data)
+    return jsonify({'message': f'Listing Unpublished successfully!', 'updated_data': updated_data}), 200
+
+# CHAT FEATURE
+
+@socketio.on('join_room')
+def handle_join_room(room):
+    join_room(room)
+    print(f'User joined room {room}')
+
+
+@socketio.on('leave_room')
+def handle_leave_room(room):
+    leave_room(room)
+    print(f'User left room {room}')
+
+@views.route('/send_message', methods=['POST'])
+@jwt_required()
+@current_user_required
+def send_message():
+    sender_id = g.current_user['id']
+    receiver_id = request.json.get('receiver_id')
+    message_content = request.json.get('message')
+
+    # Check if a conversation already exists between sender and receiver
+    conversation = Conversation.query.filter(
+        (Conversation.sender_id == sender_id) & (Conversation.receiver_id == receiver_id) |
+        (Conversation.sender_id == receiver_id) & (Conversation.receiver_id == sender_id)
+    ).first()
+
+    if not conversation:
+        # If no conversation exists, create a new one
+        conversation = Conversation(sender_id=sender_id, receiver_id=receiver_id)
+        db.session.add(conversation)
+        db.session.commit()
+
+    conversation.timestamp = datetime.utcnow()
+    conversation.is_read = 0
+    db.session.commit()
+
+    # Create a new message and add it to the conversation
+    message = Messages(conversation_id=conversation.id, sender_id=sender_id, message=message_content)
+    db.session.add(message)
+    db.session.commit()
+
+    # Emit the new message to the conversation room
+    room = str(conversation.id)
+    socketio.emit('new_message', {
+        'sender_id': message.sender_id,
+        'sender_name': message.user.first_name + ' ' + message.user.last_name,
+        'sender_profile_picture': message.user.profile_picture,
+        'message': message.message,
+        'timestamp': message.timestamp.isoformat()
+    }, room=room)
+
+    # Emit the new message to the inbox room
+    room_inbox = str(receiver_id)
+    emit_inbox_message(conversation, room_inbox)
+
+    # Retrieve the push Token of the receiver
+    push_token = PushToken.query.filter_by(user_id=receiver_id).first()
+    if push_token:
+        send_push_notification_to_user(push_token, 'You have a new message!')
+    else:
+        print('No Push Token')
+
+
+    return jsonify({'message': 'Message sent successfully'})
+
+# Function to send push notification to a user
+def send_push_notification_to_user(push_token, message):
+    try:
+        response = PushClient().publish(
+            PushMessage(to=push_token, body=message)
+        )
+        # Handle response if needed
+        if response.is_successful:
+            print("Push notification sent successfully")
+        else:
+            print("Push notification failed to send")
+    except Exception as e:
+        # Handle exceptions
+        print("Exception:", e)
+
+@views.route('/store_push_token', methods=['POST'])
+@jwt_required()
+@current_user_required
+def store_push_token():
+    user_id = g.current_user['id']
+    push_token = request.json.get('push_token')
+
+    # Check if the push token already exists for the user
+    existing_token = PushToken.query.filter_by(user_id=user_id).first()
+
+    if existing_token:
+        # Update the existing push token
+        existing_token.push_token = push_token
+    else:
+        # Create a new entry for the push token
+        new_token = PushToken(user_id=user_id, push_token=push_token)
+        db.session.add(new_token)
+
+    db.session.commit()
+
+    return jsonify({'message': 'Push token stored successfully'})
+
+def emit_inbox_message(conversation, room_inbox):
+    user_id = g.current_user['id']
+    # Determine the other user involved in the conversation
+    other_user_id = conversation.receiver_id if conversation.sender_id == user_id else conversation.sender_id
+
+    # Get the latest message in the conversation
+    latest_message = Messages.query.filter_by(conversation_id=conversation.id).order_by(
+        Messages.timestamp.desc()).first()
+
+    # Retrieve the full name of the other user
+    other_user = User.query.get(other_user_id)
+    other_user_full_name = other_user.first_name + ' ' + other_user.last_name if other_user else None
+    other_user_profile_picture = other_user.profile_picture
+    # Emit the new message to the inbox room
+    socketio.emit('new_message_inbox', {
+        'conversation_id': conversation.id,
+        'other_user_id': other_user_id,
+        'other_user_full_name': other_user_full_name,
+        'other_user_profile_picture': other_user_profile_picture,
+        'latest_message': {
+            'sender_id': latest_message.sender_id if latest_message else None,
+            'message': latest_message.message if latest_message else None,
+            'timestamp': latest_message.timestamp.isoformat() if latest_message else None
+        },
+        'is_read': conversation.is_read
+    }, room=room_inbox)
+
+
+@views.route('/get_chat_history', methods=['GET'])
+@jwt_required()
+@current_user_required
+def get_chat_history():
+    sender_id = g.current_user['id']
+    receiver_id = request.args.get('receiver_id')
+
+    # Find the conversation between the sender and receiver
+    conversation = Conversation.query.filter(
+        (Conversation.sender_id == sender_id) &
+        (Conversation.receiver_id == receiver_id) |
+        (Conversation.sender_id == receiver_id) &
+        (Conversation.receiver_id == sender_id)
+    ).first()
+
+    if conversation is None:
+        return jsonify({'error': 'No conversation found'})
+
+    latest_message = Messages.query.filter_by(conversation_id=conversation.id).order_by(
+        Messages.timestamp.desc()).first()
+
+    if latest_message.sender_id != g.current_user['id']:
+        conversation.is_read = 1
+        db.session.commit()
+
+    # Retrieve messages associated with the conversation
+    messages = Messages.query.filter_by(conversation_id=conversation.id).order_by(Messages.timestamp).all()
+
+    # Construct response with message data
+    chat_history = [{
+        'sender_id': message.sender_id,
+        'sender_name': message.user.first_name + ' ' + message.user.last_name,
+        'sender_profile_picture': message.user.profile_picture,
+        'message': message.message,
+        'timestamp': message.timestamp.isoformat()
+    } for message in messages]
+
+    return jsonify({'chat_history': chat_history})
+
+
+@views.route('/inbox', methods=['GET'])
+@jwt_required()
+@current_user_required
+def inbox():
+    user_id = g.current_user['id']
+
+    # Query conversations where the user is either the sender or the receiver
+    conversations = Conversation.query.filter(
+        (Conversation.sender_id == user_id) |
+        (Conversation.receiver_id == user_id)
+    ).order_by(Conversation.timestamp.desc()).all()
+
+    inbox_data = []
+
+    for conversation in conversations:
+        # Determine the other user involved in the conversation
+        other_user_id = conversation.receiver_id if conversation.sender_id == user_id else conversation.sender_id
+
+        # Get the latest message in the conversation
+        latest_message = Messages.query.filter_by(conversation_id=conversation.id).order_by(Messages.timestamp.desc()).first()
+
+        # Retrieve the full name of the other user
+        other_user = User.query.get(other_user_id)
+        other_user_full_name = other_user.first_name + ' ' + other_user.last_name if other_user else None
+        other_user_profile_picture = other_user.profile_picture
+
+        # Construct inbox data for this conversation
+        inbox_data.append({
+            'conversation_id': conversation.id,
+            'other_user_id': other_user_id,
+            'other_user_full_name': other_user_full_name,
+            'other_user_profile_picture': other_user_profile_picture,
+            'latest_message': {
+                'sender_id': latest_message.sender_id if latest_message else None,
+                'message': latest_message.message if latest_message else None,
+                'timestamp': latest_message.timestamp.isoformat() if latest_message else None
+            },
+            'is_read': conversation.is_read  # Include the is_read attribute
+        })
+
+    return jsonify({'inbox': inbox_data})
+
+# Dashboard ADMIN
+@views.route('/admin/dashboard', methods=['GET'])
+@jwt_required()
+@current_user_required
+def admin_dashboard():
+    # Count subscribed users
+    subscribed_users_count = User.query.filter(User.is_subscribe_to_package == 1).count()
+
+    # Count published listings
+    published_listings_count = Listings.query.filter(Listings.publish_status == 1).count()
+
+    # Count in-review listings
+    in_review_listings_count = Listings.query.filter(Listings.publish_status == 0).count()
 
     return jsonify({
-        "Success": '200',
+        "subscribed_users_count": subscribed_users_count,
+        "published_listings_count": published_listings_count,
+        "in_review_listings_count": in_review_listings_count
     }), 200

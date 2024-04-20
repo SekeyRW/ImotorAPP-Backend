@@ -139,7 +139,7 @@ function BoatListings() {
                 <div className="card-body rounded-3">
                     <div className="row g-3">
                         <div className='col-md-9'>
-                            <input type="text" className="form-control" placeholder="Search Boat Title!"
+                            <input type="text" className="form-control" placeholder="Search Boat Title  or User Name!"
                                    aria-label="Search"
                                    aria-describedby="basic-addon2" value={searchTerm}
                                    onChange={e => setSearchTerm(e.target.value)}/>
@@ -220,7 +220,7 @@ function BoatListings() {
                                             }}><i className='fas fa-edit'></i></button>
                                             {data.publish_status === 0 && (
                                                 <button className="btn btn-primary btn-sm mx-1"
-                                                        onClick={() => window.open(`https://imotor.app/imotor/boat-details/${data.id}`)}>
+                                                        onClick={() => window.open(`https://imotor.app/boat-details/${data.id}`)}>
                                                     Review
                                                 </button>
                                             )}

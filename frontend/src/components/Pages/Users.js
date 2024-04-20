@@ -2,6 +2,8 @@ import ReactPaginate from "react-paginate";
 import {useEffect, useState} from "react";
 import axios from "axios";
 import Loading from "../Others/Loading";
+import {toast} from "react-toastify";
+import {Button, Modal} from "react-bootstrap";
 
 function Users() {
     const token = localStorage.getItem("token");
@@ -11,6 +13,10 @@ function Users() {
     const [searchTerm, setSearchTerm] = useState('');
     const [data, setData] = useState([])
     const [isLoading, setLoading] = useState(true)
+
+    const [deleteDataId, setDeleteDataId] = useState(null);
+    const [deleteDataName, setDeleteDataName] = useState(null);
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
 
     const pageCount = Math.ceil(total / pageSize);
     const handlePageChange = ({selected}) => {
@@ -34,6 +40,30 @@ function Users() {
                 setLoading(false)
             })
     }, [pageNumber, pageSize, searchTerm, token])
+
+    function confirmDeleteData(id, first_name, last_name) {
+        setDeleteDataId(id);
+        setDeleteDataName(`${first_name} ${last_name} `);
+        setShowDeleteModal(true);
+    }
+
+    function handleDeleteData(id) {
+        fetch(`${process.env.REACT_APP_API_URL}/admin/delete/user/${id}`, {
+            method: 'DELETE', headers: {
+                'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`,
+            }
+        })
+            .then(response => {
+                const updatedData = data.filter(item => item.id !== id);
+                setData(updatedData);
+                toast.success('User removed successfully.');
+            })
+            .catch(error => {
+                console.error(error);
+                toast.error('An error occurred while deleting data.');
+            });
+    }
+
 
     if (isLoading) {
         return (
@@ -83,6 +113,11 @@ function Users() {
                                 <th>Whats App Number</th>
                                 <th>Viber Number</th>
                                 <th>is Verified</th>
+                                <th>is Subscribed to Premium Package</th>
+                                <th>Standard Listing Count</th>
+                                <th>Featured Listing Count</th>
+                                <th>Premium Listing Count</th>
+                                <th>Action</th>
                             </tr>
                             </thead>
                             <tbody className='table-group-divider'>
@@ -109,8 +144,18 @@ function Users() {
                                         <td>{data.whats_app_number}</td>
                                         <td>{data.viber_number}</td>
                                         <td>{data.verified_name}</td>
-                                        <td>{data.standard_listing}</td>
-                                        <td>{data.standard_listings_count}</td>
+                                        <td>
+                                            {data.is_subscribe_to_package === 1 ? 'Subscribed' : 'Not Subscribed'}
+                                        </td>
+                                        <td>{data.standard_listing}/{data.standard_listings_count}</td>
+                                        <td>{data.featured_listing}/{data.featured_listings_count}</td>
+                                        <td>{data.premium_listing}/{data.premium_listings_count}</td>
+                                        <td>
+                                            <button className="btn btn-danger btn-sm"
+                                                    onClick={() => confirmDeleteData(data.id, data.first_name, data.last_name)}>
+                                                <i
+                                                    className='fas fa-trash-alt'></i></button>
+                                        </td>
                                     </tr>
                                 )))}
                             </tbody>
@@ -135,6 +180,28 @@ function Users() {
                     />
                 </div>
             </div>
+
+            <Modal show={showDeleteModal} onHide={() => setShowDeleteModal(false)} backdrop='static'>
+                <Modal.Header>
+                    <Modal.Title>Delete User</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                    <p>Are you sure you want to delete {deleteDataName}?</p>
+                    <p>Removing {deleteDataName} will also remove all the data related to the user.</p>
+                </Modal.Body>
+                <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setShowDeleteModal(false)}>
+                        Cancel
+                    </Button>
+                    <Button variant="danger" onClick={() => {
+                        handleDeleteData(deleteDataId);
+                        setShowDeleteModal(false);
+                    }}>
+                        Delete
+                    </Button>
+                </Modal.Footer>
+            </Modal>
+
         </>
     )
 }

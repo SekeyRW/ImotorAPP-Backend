@@ -202,7 +202,7 @@ def apple_auth_callback():
         db.session.add(new_refresh_token)
         db.session.commit()
         return redirect(
-            f'{current_app.config["FRONTEND_URL"]}/imotor/validating-token?access_token={access_token}&refresh_token={refresh_token}')
+            f'{current_app.config["FRONTEND_URL"]}/validating-token?access_token={access_token}&refresh_token={refresh_token}')
     else:
         id_token = form_data.get('id_token')
         if id_token is None:
@@ -229,7 +229,7 @@ def apple_auth_callback():
         db.session.add(new_refresh_token)
         db.session.commit()
         return redirect(
-            f'{current_app.config["FRONTEND_URL"]}/imotor/validating-token?access_token={access_token}&refresh_token={refresh_token}')
+            f'{current_app.config["FRONTEND_URL"]}/validating-token?access_token={access_token}&refresh_token={refresh_token}')
 
 
 # CODE GENERATOR

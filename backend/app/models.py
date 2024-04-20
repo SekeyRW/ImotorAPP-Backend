@@ -63,6 +63,11 @@ class User(db.Model):
     created_date = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
     updated_by = db.Column(db.String(255))
     updated_date = db.Column(db.DateTime(timezone=True))
+    message = db.relationship("Messages", backref="user", lazy="select", cascade='all, delete')
+    conversation_sender = db.relationship("Conversation", backref="sender", lazy="select",
+                                                 foreign_keys="Conversation.sender_id")
+    conversation_receiver = db.relationship("Conversation", backref="receiver", lazy="select",
+                                                 foreign_keys="Conversation.receiver_id")
 
     @property
     def verified_name(self):
@@ -301,3 +306,25 @@ class OrderHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete='CASCADE'), nullable=False)
     description = db.Column(db.Text)
+
+class Messages(db.Model):
+    __tablename__ = 'messages'
+    id = db.Column(db.Integer, primary_key=True)
+    sender_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete='CASCADE'), nullable=False)
+    conversation_id = db.Column(db.Integer, db.ForeignKey("conversation.id", ondelete='CASCADE'), nullable=False)
+    message = db.Column(db.Text)
+    timestamp = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
+
+class Conversation(db.Model):
+    __tablename__ = 'conversation'
+    id = db.Column(db.Integer, primary_key=True)
+    receiver_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete='CASCADE'), nullable=False)
+    sender_id = db.Column(db.Integer, db.ForeignKey("user.id", ondelete='CASCADE'), nullable=False)
+    is_read = db.Column(db.Boolean, default=False)
+    timestamp = db.Column(db.DateTime(timezone=True), default=datetime.utcnow)
+    message = db.relationship("Messages", backref="conversation", lazy='select', cascade="all, delete")
+
+class PushToken(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer)
+    push_token = db.Column(db.String(255))

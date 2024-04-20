@@ -8,8 +8,10 @@ from flask_jwt_extended import JWTManager
 from flask_bcrypt import Bcrypt
 from os.path import join, dirname, realpath
 from flask_mail import Mail
+from flask_socketio import SocketIO
 
 db = SQLAlchemy()
+socketio = SocketIO()
 migrate = Migrate()
 ma = Marshmallow()
 jwt = JWTManager()
@@ -50,6 +52,7 @@ def create_app():
 
     db.init_app(app)
     migrate.init_app(app, db)
+    socketio.init_app(app, cors_allowed_origins="*")
     ma.init_app(app)
     CORS(app)
     jwt.init_app(app)

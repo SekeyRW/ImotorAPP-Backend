@@ -139,7 +139,7 @@ function HeavyVehicleListings() {
                 <div className="card-body rounded-3">
                     <div className="row g-3">
                         <div className='col-md-9'>
-                            <input type="text" className="form-control" placeholder="Search Heavy Vehicle Title!"
+                            <input type="text" className="form-control" placeholder="Search Heavy Vehicle Title  or User Name!"
                                    aria-label="Search"
                                    aria-describedby="basic-addon2" value={searchTerm}
                                    onChange={e => setSearchTerm(e.target.value)}/>
@@ -220,7 +220,7 @@ function HeavyVehicleListings() {
                                             }}><i className='fas fa-edit'></i></button>
                                             {data.publish_status === 0 && (
                                                 <button className="btn btn-primary btn-sm mx-1"
-                                                        onClick={() => window.open(`https://imotor.app/imotor/heavy-vehicle-details/${data.id}`)}>
+                                                        onClick={() => window.open(`https://imotor.app/heavy-vehicle-details/${data.id}`)}>
                                                     Review
                                                 </button>
                                             )}

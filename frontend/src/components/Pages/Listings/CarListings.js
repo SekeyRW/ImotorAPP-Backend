@@ -138,7 +138,7 @@ function CarListings() {
                 <div className="card-body rounded-3">
                     <div className="row g-3">
                         <div className='col-md-9'>
-                            <input type="text" className="form-control" placeholder="Search Car Title!"
+                            <input type="text" className="form-control" placeholder="Search Car Title or User Name!"
                                    aria-label="Search"
                                    aria-describedby="basic-addon2" value={searchTerm}
                                    onChange={e => setSearchTerm(e.target.value)}/>
@@ -221,7 +221,7 @@ function CarListings() {
                                             }}><i className='fas fa-edit'></i></button>
                                             {data.publish_status === 0 && (
                                                 <button className="btn btn-primary btn-sm mx-1"
-                                                        onClick={() => window.open(`https://imotor.app/imotor/car-details/${data.id}`)}>
+                                                        onClick={() => window.open(`https://imotor.app/car-details/${data.id}`)}>
                                                     Review
                                                 </button>
                                             )}
