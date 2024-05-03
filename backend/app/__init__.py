@@ -36,7 +36,7 @@ def create_app():
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
     # Set the Stripe API key here
-    stripe.api_key = 'sk_test_51OluYsDvpPWaX3mF8TsPQg5AEU2bP9DnBad4jpBeNcs62Oev6umbEOIRdKRRc39RWmHOCiKJkKuOTOFu7Ke1RtRp00Upg2naRe'
+    stripe.api_key = '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'
 
     app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024
 

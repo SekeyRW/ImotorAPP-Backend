@@ -182,6 +182,7 @@ function HeavyVehicleListings() {
                                 <th>Variant</th>
                                 <th>Mileage</th>
                                 <th>User</th>
+                                <th>Publish Status</th>
                                 <th>Action</th>
                             </tr>
                             </thead>
@@ -210,6 +211,7 @@ function HeavyVehicleListings() {
                                         <td>{data.variant}</td>
                                         <td>{data.mileage}</td>
                                         <td>{data.user.first_name} {data.user.last_name}</td>
+                                        <td>{data.publish_status_name}</td>
                                         <td>
                                             <button className="btn btn-warning btn-sm mx-1" onClick={() => {
                                                 setUpdateId(data.id)

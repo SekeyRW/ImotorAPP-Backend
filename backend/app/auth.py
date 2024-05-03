@@ -19,7 +19,7 @@ def create_stripe_customer(user_id):
     try:
         # Create a customer in Stripe with your own unique identifier
         stripe.Customer.create(
-            id=f'imotorV2_{user.id}',  # Use the user's ID from your database
+            id=f'imotorV3_{user.id}',  # Use the user's ID from your database
             name=f'{user.first_name} {user.last_name}'
             # Add other optional parameters as needed
         )

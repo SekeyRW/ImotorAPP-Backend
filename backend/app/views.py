@@ -10,6 +10,7 @@ from flask import Blueprint, jsonify, request, send_from_directory, current_app,
 from flask_jwt_extended import jwt_required
 from flask_mail import Message
 from flask_socketio import join_room, leave_room
+from google_play_scraper import app
 from slugify import slugify
 from sqlalchemy import or_, and_, desc
 from werkzeug.utils import secure_filename
@@ -218,6 +219,7 @@ def admin_delete_user(id):
         if os.path.exists(image_path):
             os.remove(image_path)
 
+    delete_stripe_customer(data.id)
     db.session.delete(data)
     db.session.commit()
 
@@ -3650,10 +3652,28 @@ def delete_user(id):
                 if os.path.exists(image_path):
                     os.remove(image_path)
 
+    profile_picture = data.profile_picture
+    if profile_picture == 'default_profile_picture.jpg':
+        pass
+    else:
+        image_path = os.path.join(current_app.config['UPLOAD_FOLDER'], profile_picture)
+        if os.path.exists(image_path):
+            os.remove(image_path)
+
+    delete_stripe_customer(data.id)
     db.session.delete(data)
     db.session.commit()
 
     return 'Success!', 200
+
+def delete_stripe_customer(stripe_customer_id):
+    try:
+        stripe_customer = f'imotorV3_{stripe_customer_id}'
+        # Delete the customer in Stripe
+        stripe.Customer.delete(stripe_customer)
+        print("Customer deleted successfully in Stripe.")
+    except stripe.error.InvalidRequestError as e:
+        print(f"Error deleting customer in Stripe: {e}")
 
 
 ############## END OF USER PROFILE ENDPOINTS #######################
@@ -3680,7 +3700,7 @@ def client_brands_view():
 def create_checkout_session():
     new_data = request.get_json()
     try:
-        stripe_customer_id = f'imotorV2_{g.current_user["id"]}'
+        stripe_customer_id = f'imotorV3_{g.current_user["id"]}'
         session = stripe.checkout.Session.create(
             ui_mode='embedded',
             line_items=[
@@ -3707,7 +3727,7 @@ def create_checkout_session():
 def create_checkout_session_native():
     new_data = request.get_json()
     try:
-        stripe_customer_id = f'imotorV2_{new_data["user_id"]}'
+        stripe_customer_id = f'imotorV3_{new_data["user_id"]}'
         user_data = User.query.get(new_data["user_id"])
         session = stripe.checkout.Session.create(
             ui_mode='embedded',
@@ -3755,7 +3775,7 @@ def stripe_webhook():
 
     try:
         event = stripe.Webhook.construct_event(
-            payload, sig_header, 'whsec_oqxVEZ8EYHv6QGk5dkBkn1h6UK2tXZUv'
+            payload, sig_header, 'whsec_pYkAnPulaxWdXSbdPv7IY2y5CfQpq2XL'
         )
     except ValueError as e:
         # Invalid payload
@@ -3776,11 +3796,11 @@ def stripe_webhook():
             plan_id = subscription.plan.id
             quantity = subscription.quantity
         parts = customer_id.split("_")
-        if len(parts) == 2 and parts[0] == "imotorV2":
+        if len(parts) == 2 and parts[0] == "imotorV3":
             user_id = parts[1]
             user_data = User.query.get(user_id)
             if user_data:
-                if plan_id == 'price_1OmCRADvpPWaX3mF1CHQIjph':
+                if plan_id == 'price_1OrYWIDvpPWaX3mFsWNweyeK':
                     # price_1OrYWIDvpPWaX3mFsWNweyeK
                     plan_name = 'PREMIUM PACKAGE'
                     quantity = 1
@@ -3797,7 +3817,7 @@ def stripe_webhook():
                                               args=(customer_email, plan_name, quantity, invoice_url,
                                                     current_app._get_current_object()))
                     thread.start()
-                elif plan_id == 'price_1OmCRvDvpPWaX3mFKHD2Ugel':
+                elif plan_id == 'price_1OrYWFDvpPWaX3mFQKEQ2HGD':
                     # price_1OrYWFDvpPWaX3mFQKEQ2HGD
                     plan_name = 'ADDITIONAL STANDARD LISTING'
                     user_data.standard_listing = user_data.standard_listing + int(quantity)
@@ -3810,7 +3830,7 @@ def stripe_webhook():
                                               args=(customer_email, plan_name, quantity, invoice_url,
                                                     current_app._get_current_object()))
                     thread.start()
-                elif plan_id == 'price_1OmCPfDvpPWaX3mFCTdaJdr0':
+                elif plan_id == 'price_1OrYWKDvpPWaX3mFEXsKyKkv':
                     # price_1OrYWKDvpPWaX3mFEXsKyKkv
                     plan_name = 'ADDITIONAL FEATURED LISTING'
                     user_data.featured_listing = user_data.featured_listing + int(quantity)
@@ -3823,7 +3843,7 @@ def stripe_webhook():
                                               args=(customer_email, plan_name, quantity, invoice_url,
                                                     current_app._get_current_object()))
                     thread.start()
-                elif plan_id == 'price_1OmCTUDvpPWaX3mFB6skAGpQ':
+                elif plan_id == 'price_1OrYVtDvpPWaX3mFm5djUTrr':
                     # price_1OrYVtDvpPWaX3mFm5djUTrr
                     plan_name = 'ADDITIONAL PREMIUM LISTING'
                     user_data.premium_listing = user_data.premium_listing + int(quantity)
@@ -3850,10 +3870,10 @@ def stripe_webhook():
         print(customer_id)
 
         parts = customer_id.split("_")
-        if len(parts) == 2 and parts[0] == "imotorV2":
+        if len(parts) == 2 and parts[0] == "imotorV3":
             user_id = parts[1]
             user_data = User.query.get(user_id)
-            if product_id == 'prod_PbPGcIZ8mGDgKt':
+            if product_id == 'prod_PgwPGPw7ro44tD':
                 # prod_PgwPGPw7ro44tD
                 if user_data.is_subscribe_to_package == 1:
                     old_user_data = user_data.standard_listing
@@ -3873,7 +3893,7 @@ def stripe_webhook():
                     for listing in listings:
                         listing.publish_status = 2
                         db.session.commit()
-            elif product_id == 'prod_PbPEwLQCcVKadd':
+            elif product_id == 'prod_PgwPWCQ4vqJCLI':
                 # prod_PgwPWCQ4vqJCLI
                 if user_data.is_subscribe_to_package == 1:
                     old_user_data = user_data.featured_listing
@@ -3893,7 +3913,7 @@ def stripe_webhook():
                     for listing in listings:
                         listing.publish_status = 2
                         db.session.commit()
-            elif product_id == 'prod_PbPInhDd5zE2d5':
+            elif product_id == 'prod_PgwOWe6kwz1agd':
                 # prod_PgwOWe6kwz1agd
                 if user_data.is_subscribe_to_package == 1:
                     old_user_data = user_data.premium_listing
@@ -3913,7 +3933,7 @@ def stripe_webhook():
                     for listing in listings:
                         listing.publish_status = 2
                         db.session.commit()
-            elif product_id == 'prod_PbPFZ2qSaqQFS5':
+            elif product_id == 'prod_PgwPz8DTwFRMOp':
                 print('Delete Subscription: Premium Package')
                 # prod_PgwPz8DTwFRMOp
                 if user_data.standard_listing == 16:
@@ -3991,11 +4011,11 @@ def stripe_webhook():
             product_id = lines[0].get('price', {}).get('product')
 
         parts = customer_id.split("_")
-        if len(parts) == 2 and parts[0] == "imotorV2":
+        if len(parts) == 2 and parts[0] == "imotorV3":
             user_id = parts[1]
             user_data = User.query.get(user_id)
             if user_data:
-                if product_id == 'prod_PbPGcIZ8mGDgKt':
+                if product_id == 'prod_PgwPGPw7ro44tD':
                     # prod_PgwPGPw7ro44tD
                     plan_name = 'Additional Standard Listing'
                     if user_data.standard_listing_desc:
@@ -4013,7 +4033,7 @@ def stripe_webhook():
 
                         user_data.standard_listing_desc = f'Sent First Email on Payment Failed in {dateNowFormatted}, Manual Cancellation will be on {dateInSevenDaysFormatted}'
                         db.session.commit()
-                elif product_id == 'prod_PbPEwLQCcVKadd':
+                elif product_id == 'prod_PgwPWCQ4vqJCLI':
                     # prod_PgwPWCQ4vqJCLI
                     plan_name = 'Additional Featured Listing'
                     if user_data.featured_listing_desc:
@@ -4031,7 +4051,7 @@ def stripe_webhook():
 
                         user_data.featured_listing_desc = f'Sent First Email on Payment Failed in {dateNowFormatted}, Manual Cancellation will be on {dateInSevenDaysFormatted}'
                         db.session.commit()
-                elif product_id == 'prod_PbPInhDd5zE2d5':
+                elif product_id == 'prod_PgwOWe6kwz1agd':
                     # prod_PgwOWe6kwz1agd
                     plan_name = 'Additional Premium Listing'
                     if user_data.premium_listing_desc:
@@ -4049,7 +4069,7 @@ def stripe_webhook():
 
                         user_data.premium_listing_desc = f'Sent First Email on Payment Failed in {dateNowFormatted}, Manual Cancellation will be on {dateInSevenDaysFormatted}'
                         db.session.commit()
-                elif product_id == 'prod_PbPFZ2qSaqQFS5':
+                elif product_id == 'prod_PgwPz8DTwFRMOp':
                     # prod_PgwPz8DTwFRMOp
                     plan_name = 'Premium Package'
                     if user_data.premium_package_desc:
@@ -4090,20 +4110,20 @@ def stripe_webhook():
             product_id = lines[0].get('price', {}).get('product')
 
         parts = customer_id.split("_")
-        if len(parts) == 2 and parts[0] == "imotorV2":
+        if len(parts) == 2 and parts[0] == "imotorV3":
             user_id = parts[1]
             user_data = User.query.get(user_id)
             if user_data:
-                if product_id == 'prod_PbPGcIZ8mGDgKt':
+                if product_id == 'prod_PgwPGPw7ro44tD':
                     # prod_PgwPGPw7ro44tD
                     plan_name = 'Additional Standard Listing'
-                elif product_id == 'prod_PbPEwLQCcVKadd':
+                elif product_id == 'prod_PgwPWCQ4vqJCLI':
                     # prod_PgwPWCQ4vqJCLI
                     plan_name = 'Additional Featured Listing'
-                elif product_id == 'prod_PbPInhDd5zE2d5':
+                elif product_id == 'prod_PgwOWe6kwz1agd':
                     # prod_PgwOWe6kwz1agd
                     plan_name = 'Additional Premium Listing'
-                elif product_id == 'prod_PbPFZ2qSaqQFS5':
+                elif product_id == 'prod_PgwPz8DTwFRMOp':
                     # prod_PgwPz8DTwFRMOp
                     plan_name = 'Premium Package'
                 fullname = f'{user_data.first_name} {user_data.last_name}'
@@ -4183,6 +4203,10 @@ def send_payment_failed(user_mail, user_fullname, plan_name, invoice_url, app):
                             <div style="text-align: left">
                                 We noticed that there was an issue processing your payment for the {plan_name} plan subscription.
                                 To avoid interruption of your service, please update your payment information within the next 7 days.
+                            </div>
+                            <br/>
+                            <div style="text-align: left">
+                                Please please update your payment information at the following link: <a href="https://billing.stripe.com/p/login/3csbLvgxL5868CI144">https://billing.stripe.com/p/login/3csbLvgxL5868CI144</a>
                             </div>
                             <br/>
                             <div style="text-align: left">
@@ -4292,7 +4316,7 @@ def import_users_to_stripe():
         try:
             # Create a customer in Stripe using the user's ID as the customer ID
             stripe.Customer.create(
-                id=f'imotorV2_{user.id}',
+                id=f'imotorV3_{user.id}',
                 name=f'{user.first_name} {user.last_name}'
                 # Add other optional parameters as needed
             )
@@ -4307,7 +4331,7 @@ def import_users_to_stripe():
 @jwt_required()
 @current_user_required
 def get_subscriptions():
-    customer_id = f'imotorV2_{g.current_user["id"]}'
+    customer_id = f'imotorV3_{g.current_user["id"]}'
     # Make a request to the Stripe API endpoint
     url = f'https://api.stripe.com/v1/subscriptions?customer={customer_id}'
     headers = {
@@ -4344,7 +4368,7 @@ def upgrade_subscription():
         print("SAVED")
         user_data = User.query.get(g.current_user["id"])
         print(user_data)
-        if product_id == 'prod_PbPGcIZ8mGDgKt':
+        if product_id == 'prod_PgwPGPw7ro44tD':
             # prod_PgwPGPw7ro44tD
             if user_data.is_subscribe_to_package == 0:
                 user_data.standard_listing = 3 + int(new_quantity)
@@ -4352,7 +4376,7 @@ def upgrade_subscription():
             elif user_data.is_subscribe_to_package == 1:
                 user_data.standard_listing = 16 + int(new_quantity)
                 db.session.commit()
-        elif product_id == 'prod_PbPEwLQCcVKadd':
+        elif product_id == 'prod_PgwPWCQ4vqJCLI':
             # prod_PgwPWCQ4vqJCLI
             if user_data.is_subscribe_to_package == 0:
                 user_data.featured_listing = 0 + int(new_quantity)
@@ -4360,7 +4384,7 @@ def upgrade_subscription():
             elif user_data.is_subscribe_to_package == 1:
                 user_data.featured_listing = 5 + int(new_quantity)
                 db.session.commit()
-        elif product_id == 'prod_PbPInhDd5zE2d5':
+        elif product_id == 'prod_PgwOWe6kwz1agd':
             # prod_PgwOWe6kwz1agd
             if user_data.is_subscribe_to_package == 0:
                 user_data.premium_listing = 0 + int(new_quantity)
@@ -4426,7 +4450,7 @@ def add_payment_method():
     # Assuming the payment information is sent in the request body as JSON
     payment_info = request.json
 
-    customer = stripe.Customer.retrieve(f"imotorV2_{g.current_user['id']}")
+    customer = stripe.Customer.retrieve(f"imotorV3_{g.current_user['id']}")
 
     # Create a PaymentMethod from the token
     payment_method = stripe.PaymentMethod.create(
@@ -4469,7 +4493,7 @@ def update_payment_method():
     stripe.PaymentMethod.detach(pm_id)
 
     # Retrieve the Stripe customer object associated with the currently logged-in user
-    customer = stripe.Customer.retrieve(f"imotorV2_{g.current_user['id']}")
+    customer = stripe.Customer.retrieve(f"imotorV3_{g.current_user['id']}")
 
     # Create a new PaymentMethod from the token
     new_payment_method = stripe.PaymentMethod.create(
@@ -4496,7 +4520,7 @@ def update_payment_method():
 @current_user_required
 def get_default_payment_method():
     # Retrieve the Stripe customer object associated with the currently logged-in user
-    customer = stripe.Customer.retrieve(f"imotorV2_{g.current_user['id']}")
+    customer = stripe.Customer.retrieve(f"imotorV3_{g.current_user['id']}")
 
     # Retrieve the default payment method from the invoice settings
     invoice_settings = customer.get('invoice_settings', {})
@@ -4518,7 +4542,7 @@ def get_default_payment_method():
 def get_payment_methods():
     try:
         # Retrieve the Stripe customer object associated with the currently logged-in user
-        customer = stripe.Customer.retrieve(f"imotorV2_{g.current_user['id']}")
+        customer = stripe.Customer.retrieve(f"imotorV3_{g.current_user['id']}")
 
         # Retrieve all payment methods associated with the customer
         payment_methods = stripe.PaymentMethod.list(customer=customer.id)
@@ -4543,7 +4567,7 @@ def update_default_payment_method():
             return jsonify({'error': 'Payment method ID is required'}), 400
 
         # Retrieve the Stripe customer object associated with the currently logged-in user
-        customer = stripe.Customer.retrieve(f"imotorV2_{g.current_user['id']}")
+        customer = stripe.Customer.retrieve(f"imotorV3_{g.current_user['id']}")
 
         # Update the default payment method for the customer
         customer.default_payment_method = payment_method_id
@@ -4857,14 +4881,21 @@ def admin_dashboard():
     # Count subscribed users
     subscribed_users_count = User.query.filter(User.is_subscribe_to_package == 1).count()
 
+
     # Count published listings
     published_listings_count = Listings.query.filter(Listings.publish_status == 1).count()
 
     # Count in-review listings
     in_review_listings_count = Listings.query.filter(Listings.publish_status == 0).count()
 
+    #Google App Scraper
+    app_info = app('com.paras23.iMotor.app')
+    g_count = app_info['realInstalls']
+
     return jsonify({
         "subscribed_users_count": subscribed_users_count,
         "published_listings_count": published_listings_count,
-        "in_review_listings_count": in_review_listings_count
+        "in_review_listings_count": in_review_listings_count,
+        "google_installs": g_count
     }), 200
+

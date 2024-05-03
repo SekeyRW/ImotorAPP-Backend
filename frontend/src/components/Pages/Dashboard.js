@@ -11,6 +11,7 @@ function Dashboard() {
     const [subscribedUsersCount, setSubscribedUsersCount] = useState(0);
     const [publishedListingsCount, setPublishedListingsCount] = useState(0);
     const [inReviewListingsCount, setInReviewListingsCount] = useState(0);
+     const [GCount, setGCount] = useState(0);
 
     useEffect(() => {
         axios.get(`${process.env.REACT_APP_API_URL}/admin/dashboard`, {
@@ -22,6 +23,7 @@ function Dashboard() {
                 setSubscribedUsersCount(response.data.subscribed_users_count);
                 setPublishedListingsCount(response.data.published_listings_count);
                 setInReviewListingsCount(response.data.in_review_listings_count);
+                setGCount(response.data.google_installs);
             })
             .catch(error => {
                 console.log(error)
@@ -89,26 +91,7 @@ function Dashboard() {
                                             <span>Android Downloads</span>
                                         </div>
                                         <div className="text-dark fw-bold h5 mb-0">
-                                            <span>0</span>
-                                        </div>
-                                    </div>
-                                    <div className="col-auto">
-                                        <i className="fas fa-users fa-2x text-gray-300"></i>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div className="col">
-                        <div className="card shadow border-start-success py-2">
-                            <div className="card-body">
-                                <div className="row align-items-center no-gutters">
-                                    <div className="col me-2">
-                                        <div className="text-uppercase text-primary fw-semibold mb-2">
-                                            <span>IOS Downloads</span>
-                                        </div>
-                                        <div className="text-dark fw-bold h5 mb-0">
-                                            <span>0</span>
+                                            <span>{GCount}</span>
                                         </div>
                                     </div>
                                     <div className="col-auto">
