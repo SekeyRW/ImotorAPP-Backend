@@ -3770,7 +3770,7 @@ def stripe_webhook():
     global plan_id, quantity
     payload = request.get_data(as_text=True)
     sig_header = request.headers.get('Stripe-Signature')
-    # whsec_oqxVEZ8EYHv6QGk5dkBkn1h6UK2tXZUv for deployment
+    # whsec_pYkAnPulaxWdXSbdPv7IY2y5CfQpq2XL for deployment
     #whsec_ae47c490c311e3e7eda01bf4ca663cce37e42577fc004f4915c828229bad849f
 
     try:
@@ -3800,8 +3800,8 @@ def stripe_webhook():
             user_id = parts[1]
             user_data = User.query.get(user_id)
             if user_data:
-                if plan_id == 'price_1OrYWIDvpPWaX3mFsWNweyeK':
-                    # price_1OrYWIDvpPWaX3mFsWNweyeK
+                if plan_id == 'price_1PHMRIDvpPWaX3mFQp6SSx0w':
+                    # price_1PHMRIDvpPWaX3mFQp6SSx0w
                     plan_name = 'PREMIUM PACKAGE'
                     quantity = 1
                     user_data.standard_listing = user_data.standard_listing + 13
@@ -3817,8 +3817,8 @@ def stripe_webhook():
                                               args=(customer_email, plan_name, quantity, invoice_url,
                                                     current_app._get_current_object()))
                     thread.start()
-                elif plan_id == 'price_1OrYWFDvpPWaX3mFQKEQ2HGD':
-                    # price_1OrYWFDvpPWaX3mFQKEQ2HGD
+                elif plan_id == 'price_1PHMS7DvpPWaX3mFMqsYC352':
+                    # price_1PHMS7DvpPWaX3mFMqsYC352
                     plan_name = 'ADDITIONAL STANDARD LISTING'
                     user_data.standard_listing = user_data.standard_listing + int(quantity)
                     db.session.commit()
@@ -3830,8 +3830,8 @@ def stripe_webhook():
                                               args=(customer_email, plan_name, quantity, invoice_url,
                                                     current_app._get_current_object()))
                     thread.start()
-                elif plan_id == 'price_1OrYWKDvpPWaX3mFEXsKyKkv':
-                    # price_1OrYWKDvpPWaX3mFEXsKyKkv
+                elif plan_id == 'price_1PHMQPDvpPWaX3mFGjbJiB87':
+                    # price_1PHMQPDvpPWaX3mFGjbJiB87
                     plan_name = 'ADDITIONAL FEATURED LISTING'
                     user_data.featured_listing = user_data.featured_listing + int(quantity)
                     db.session.commit()
@@ -3843,8 +3843,8 @@ def stripe_webhook():
                                               args=(customer_email, plan_name, quantity, invoice_url,
                                                     current_app._get_current_object()))
                     thread.start()
-                elif plan_id == 'price_1OrYVtDvpPWaX3mFm5djUTrr':
-                    # price_1OrYVtDvpPWaX3mFm5djUTrr
+                elif plan_id == 'price_1PHMSeDvpPWaX3mFedWsWoKJ':
+                    # price_1PHMSeDvpPWaX3mFedWsWoKJ
                     plan_name = 'ADDITIONAL PREMIUM LISTING'
                     user_data.premium_listing = user_data.premium_listing + int(quantity)
                     db.session.commit()
