@@ -30,23 +30,23 @@ def create_app():
     app = Flask(__name__)
     app.config['SECRET_KEY'] = 'Xf0b|iX8n8->Op|'
     app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:root@localhost/dbimotorapp'
-    #app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://imotor:Imotor%4037@localhost/dbimotorapp'
+    #app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://s:s@localhost/dbimotorapp'
     app.config["JWT_SECRET_KEY"] = "Xf0b|iX8n8->Op|"
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = 86400  # 1 day
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
     # Set the Stripe API key here
-    stripe.api_key = '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'
+    stripe.api_key = 'bbb'
 
     app.config['MAX_CONTENT_LENGTH'] = 64 * 1024 * 1024
 
-    app.config['MAIL_SERVER'] = 'smtp.office365.com'
+    app.config['MAIL_SERVER'] = 's'
     app.config['MAIL_PORT'] = 587
-    app.config['MAIL_USERNAME'] = 'info@imotor.app'
-    app.config['MAIL_PASSWORD'] = 'info@imotor@2024'
+    app.config['MAIL_USERNAME'] = 's'
+    app.config['MAIL_PASSWORD'] = 's'
     app.config['MAIL_USE_TLS'] = True
     app.config['MAIL_USE_SSL'] = False
-    app.config['MAIL_DEFAULT_SENDER'] = ('Imotor.App', 'info@imotor.app')
+    app.config['MAIL_DEFAULT_SENDER'] = ('s', 's')
 
     app.config['FRONTEND_URL'] = 'https://imotor.app'
 
