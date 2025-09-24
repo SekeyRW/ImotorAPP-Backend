@@ -28,10 +28,10 @@ def allowed_file(filename):
 
 def create_app():
     app = Flask(__name__)
-    app.config['SECRET_KEY'] = 'SUPER DUPER SUPER DUPER SECRET'
+    app.config['SECRET_KEY'] = 'Xf0b|iX8n8->Op|'
     app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://root:root@localhost/dbimotorapp'
     #app.config['SQLALCHEMY_DATABASE_URI'] = 'mysql+pymysql://imotor:Imotor%4037@localhost/dbimotorapp'
-    app.config["JWT_SECRET_KEY"] = "SUPER DUPER SUPER DUPER SECRET"
+    app.config["JWT_SECRET_KEY"] = "Xf0b|iX8n8->Op|"
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = 86400  # 1 day
     app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
