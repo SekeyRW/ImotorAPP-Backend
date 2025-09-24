@@ -63,6 +63,7 @@ def google_auth_callback():
             first_name=request.json['first_name'],
             last_name=request.json['last_name'],
             verified=isverified,
+            standard_listing=999999, #CHANGE FOR FREE
             profile_picture='default_profile_picture.jpg'
             # You might want to fetch and store more user information here
         )
@@ -120,6 +121,7 @@ def apple_auth_native_callback():
                 first_name=given_name,
                 last_name=family_name,
                 verified=1,
+                standard_listing=999999, #CHANGE FOR FREE
                 profile_picture='default_profile_picture.jpg'
             )
             db.session.add(new_user)
@@ -181,6 +183,7 @@ def apple_auth_callback():
                 email=email,
                 first_name=first_name,
                 last_name=last_name,
+                standard_listing=999999, #CHANGE FOR FREE
                 verified=1,
                 profile_picture='default_profile_picture.jpg'
             )
@@ -322,6 +325,7 @@ def verify_code():
     if user:
         if user.verification_code == verification_code:
             user.verified = 1
+            user.standard_listing=999999, #CHANGED FOR FREE
             db.session.commit()
             return jsonify({'message': 'Verification successful. User is verified.'})
         else:
